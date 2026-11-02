@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  GUEST
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         Role      @default(GUEST)
+  bookings     Booking[]
+  reviews      Review[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([email])
+}
+
+model Apartment {
+  id                String           @id @default(cuid())
+  slug              String           @unique
+  title             String
+  headline          String
+  description       String           @db.Text
+  address           String
+  city              String           @default("Makurdi")
+  state             String           @default("Benue")
+  basePricePerNight Int              // Stored in whole Naira (e.g. 45000 = ₦45,000)
+  cleaningFee       Int              @default(5000)
+  serviceFeeRate    Float            @default(0.05) // 5%
+  bedrooms          Int
+  bathrooms         Int
+  maxGuests         Int
+  sqft              Int?
+  isFeatured        Boolean          @default(false)
+  isPublished       Boolean          @default(true)
+  checkInTime       String           @default("14:00")
+  checkOutTime      String           @default("11:00")
+  houseRules        String[]
+  images            ApartmentImage[]
+  amenities         Amenity[]
+  bookings          Booking[]
+  blockedDates      BlockedDate[]
+  reviews           Review[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([city, isPublished])
+}
+
+model ApartmentImage {
+  id          String    @id @default(cuid())
+  apartmentId String
+  apartment   Apartment @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+  url         String
+  caption     String?
+  isPrimary   Boolean   @default(false)
+  order       Int       @default(0)
+
+  @@index([apartmentId])
+}
+
+model Amenity {
+  id         String      @id @default(cuid())
+  name       String      @unique
+  icon       String      // Lucide icon name, e.g. "Zap", "Wifi", "ShieldCheck"
+  category   String      // "Power & Utilities", "Comfort", "Kitchen & Dining", "Security"
+  apartments Apartment[]
+}
+
+model Booking {
+  id                String        @id @default(cuid())
+  reference         String        @unique // e.g. "YAH-2026-A8K2"
+  apartmentId       String
+  apartment         Apartment     @relation(fields: [apartmentId], references: [id])
+  userId            String
+  user              User          @relation(fields: [userId], references: [id])
+  guestFullName     String
+  guestEmail        String
+  guestPhone        String
+  checkIn           DateTime      @db.Date
+  checkOut          DateTime      @db.Date
+  nights            Int
+  guestCount        Int
+  nightlyRate       Int
+  subtotal          Int
+  cleaningFee       Int
+  serviceFee        Int
+  totalAmount       Int
+  status            BookingStatus @default(PENDING)
+  paymentStatus     PaymentStatus @default(UNPAID)
+  paystackReference String?       @unique
+  paystackPaidAt    DateTime?
+  specialRequests   String?       @db.Text
+  review            Review?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([apartmentId, checkIn, checkOut])
+  @@index([userId, status])
+  @@index([status, paymentStatus])
+}
+
+model BlockedDate {
+  id          String    @id @default(cuid())
+  apartmentId String
+  apartment   Apartment @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+  date        DateTime  @db.Date
+  reason      String?   // "Routine Maintenance", "Private Owner Use"
+  createdAt   DateTime  @default(now())
+
+  @@unique([apartmentId, date])
+  @@index([apartmentId, date])
+}
+
+model Review {
+  id          String    @id @default(cuid())
+  apartmentId String
+  apartment   Apartment @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+  bookingId   String    @unique // Verified stays only: exactly one review per booking
+  booking     Booking   @relation(fields: [bookingId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  rating      Int       // 1 - 5
+  cleanliness Int       // 1 - 5
+  accuracy    Int       // 1 - 5
+  location    Int       // 1 - 5
+  value       Int       // 1 - 5
+  comment     String    @db.Text
+  createdAt   DateTime  @default(now())
+
+  @@index([apartmentId])
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
