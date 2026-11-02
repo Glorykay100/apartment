@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { AuthProvider } from '@/context/AuthContext';
+import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
 
 export const metadata: Metadata = {
-  title: 'Yahsab Luxury Apartments & Suites | Makurdi & Abuja',
+  title: 'Yahsab Luxury Apartments & Suites | Makurdi & Abuja, Nigeria',
   description:
-    'Experience refined comfort and rooted Nigerian hospitality. Premium serviced short-let apartments with 24/7 solar power, Starlink internet, and personalized concierge.',
+    'Experience refined comfort and rooted Nigerian hospitality. Premium serviced short-let apartments in Makurdi and Abuja with guaranteed 24/7 dual solar power, Starlink internet, and personalized concierge.',
 };
 
 export default function RootLayout({
@@ -14,8 +17,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-sand-100 text-charcoal-900 antialiased selection:bg-terracotta-500 selection:text-white">
-        {children}
+      <body className="min-h-screen bg-sand-100 text-charcoal-900 antialiased selection:bg-terracotta-500 selection:text-white flex flex-col justify-between">
+        <AuthProvider>
+          <Navbar />
+          <div className="flex-1">{children}</div>
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   );
