@@ -7,6 +7,7 @@ import authRouter from './routes/auth.routes';
 import apartmentRouter from './routes/apartment.routes';
 import contactRouter from './routes/contact.routes';
 import bookingRouter from './routes/booking.routes';
+import paymentRouter from './routes/payment.routes';
 
 export const app = express();
 
@@ -46,6 +47,7 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/apartments', apartmentRouter);
 app.use('/api/v1/contact', contactRouter);
 app.use('/api/v1/bookings', bookingRouter);
+app.use('/api/v1/payments', paymentRouter);
 
 // 404 Route Handler
 app.use((_req: Request, res: Response) => {
