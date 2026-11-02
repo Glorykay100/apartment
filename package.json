@@ -1,0 +1,27 @@
+{
+  "name": "yahsab-apartments-monorepo",
+  "version": "1.0.0",
+  "description": "Yahsab Luxury Apartments & Suites - Premium Short-Let Booking Platform",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "test:backend": "npm --prefix backend test",
+    "prisma:generate": "npm --prefix backend run prisma:generate",
+    "prisma:seed": "npm --prefix backend run prisma:seed"
+  },
+  "keywords": [
+    "apartments",
+    "short-let",
+    "hospitality",
+    "nextjs",
+    "express",
+    "prisma",
+    "paystack",
+    "nigeria"
+  ],
+  "author": "Glory Itodo",
+  "license": "UNLICENSED"
+}
