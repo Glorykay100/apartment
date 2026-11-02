@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/config/db';
@@ -12,6 +12,16 @@ describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
     });
     if (!apt) throw new Error('No apartment found in test db');
     apartmentId = apt.id;
+  });
+
+  beforeEach(async () => {
+    // Clean test bookings for this apartment with test emails
+    await prisma.booking.deleteMany({
+      where: {
+        apartmentId,
+        guestEmail: { contains: 'example.com' },
+      },
+    });
   });
 
   it('should calculate server-side quote with accurate fees', async () => {
@@ -69,7 +79,21 @@ describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
   });
 
   it('CRITICAL: should reject overlapping booking for the same dates (Conflict 409)', async () => {
-    // Attempt to book overlapping dates: 2026-12-16 to 2026-12-20
+    // 1. Create original reservation: 2026-12-15 to 2026-12-18
+    const firstRes = await request(app)
+      .post('/api/v1/bookings')
+      .send({
+        apartmentId,
+        checkIn: '2026-12-15',
+        checkOut: '2026-12-18',
+        guestCount: 2,
+        guestFullName: 'Original Guest',
+        guestEmail: `original.${Date.now()}@example.com`,
+        guestPhone: '+2348022222222',
+      });
+    expect(firstRes.status).toBe(201);
+
+    // 2. Attempt overlapping reservation: 2026-12-16 to 2026-12-20
     const res = await request(app)
       .post('/api/v1/bookings')
       .send({
@@ -85,5 +109,42 @@ describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
     expect(res.status).toBe(409);
     expect(res.body.success).toBe(false);
     expect(res.body.message).toContain('unavailable');
+  });
+
+  it('should initialize and verify Paystack transaction for booking', async () => {
+    // 1. Create a fresh booking
+    const bookRes = await request(app)
+      .post('/api/v1/bookings')
+      .send({
+        apartmentId,
+        checkIn: '2026-12-25',
+        checkOut: '2026-12-28',
+        guestCount: 2,
+        guestFullName: 'Paystack Tester',
+        guestEmail: `paystack.${Date.now()}@example.com`,
+        guestPhone: '+2348011223344',
+      });
+
+    expect(bookRes.status).toBe(201);
+    const booking = bookRes.body.data.booking;
+
+    // 2. Initialize payment
+    const initRes = await request(app)
+      .post('/api/v1/payments/initialize')
+      .send({ bookingReference: booking.reference });
+
+    expect(initRes.status).toBe(200);
+    expect(initRes.body.success).toBe(true);
+    expect(initRes.body.data).toHaveProperty('authorization_url');
+
+    // 3. Verify payment
+    const verifyRes = await request(app).get(
+      `/api/v1/payments/verify/${booking.reference}`
+    );
+
+    expect(verifyRes.status).toBe(200);
+    expect(verifyRes.body.success).toBe(true);
+    expect(verifyRes.body.data.booking.status).toBe('CONFIRMED');
+    expect(verifyRes.body.data.booking.paymentStatus).toBe('PAID');
   });
 });
