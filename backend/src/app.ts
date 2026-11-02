@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import authRouter from './routes/auth.routes';
 import apartmentRouter from './routes/apartment.routes';
+import contactRouter from './routes/contact.routes';
 
 export const app = express();
 
@@ -42,6 +43,7 @@ app.get('/api/v1/health', (_req: Request, res: Response) => {
 // API Routes
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/apartments', apartmentRouter);
+app.use('/api/v1/contact', contactRouter);
 
 // 404 Route Handler
 app.use((_req: Request, res: Response) => {
