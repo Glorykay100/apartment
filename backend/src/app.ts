@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
+import authRouter from './routes/auth.routes';
 
 export const app = express();
 
@@ -36,6 +37,9 @@ app.get('/api/v1/health', (_req: Request, res: Response) => {
     uptimeSeconds: Math.floor(process.uptime()),
   });
 });
+
+// API Routes
+app.use('/api/v1/auth', authRouter);
 
 // 404 Route Handler
 app.use((_req: Request, res: Response) => {
