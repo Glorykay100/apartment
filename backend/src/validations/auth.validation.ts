@@ -21,6 +21,8 @@ export const registerSchema = z.object({
     .regex(/^(\+234|0)[789][01]\d{8}$/, 'Please enter a valid Nigerian phone number')
     .optional()
     .or(z.literal('')),
+  marketingConsent: z.boolean().optional().default(false),
+  termsAccepted: z.boolean().optional().default(false),
 });
 
 export const loginSchema = z.object({
@@ -46,3 +48,5 @@ export const resetPasswordSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

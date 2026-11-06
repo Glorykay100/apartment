@@ -1,5 +1,6 @@
 import { prisma } from '../config/db';
 import { BookingStatus, PaymentStatus, Prisma } from '@prisma/client';
+import { BUSINESS_CONFIG } from '../config/business';
 
 export class BookingConflictError extends Error {
   constructor(message: string) {
@@ -58,8 +59,8 @@ export const calculateQuoteDetails = async (
     throw new ValidationError('Minimum stay is 1 night');
   }
 
-  // Check for collision with CONFIRMED bookings or active PENDING bookings (< 15 mins)
-  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+  // Check for collision with CONFIRMED bookings or active PENDING bookings (not expired)
+  const holdExpiry = new Date(Date.now() - BUSINESS_CONFIG.bookingHoldMinutes * 60 * 1000);
   const overlappingBooking = await prisma.booking.findFirst({
     where: {
       apartmentId: apartment.id,
@@ -67,7 +68,11 @@ export const calculateQuoteDetails = async (
         { status: BookingStatus.CONFIRMED },
         {
           status: BookingStatus.PENDING,
-          createdAt: { gte: fifteenMinutesAgo },
+          // Active pending = either created recently OR has a holdExpiresAt in the future
+          OR: [
+            { createdAt: { gte: holdExpiry } },
+            { holdExpiresAt: { gte: new Date() } },
+          ],
         },
       ],
       AND: [{ checkIn: { lt: checkOut } }, { checkOut: { gt: checkIn } }],
@@ -171,7 +176,7 @@ export const createReservation = async (params: {
   // Execute atomic transaction with double-booking lock check
   const booking = await prisma.$transaction(async (tx) => {
     // Re-verify collision within transaction to handle race conditions
-    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+    const holdExpiry = new Date(Date.now() - BUSINESS_CONFIG.bookingHoldMinutes * 60 * 1000);
     const collision = await tx.booking.findFirst({
       where: {
         apartmentId: quote.apartment.id,
@@ -179,7 +184,10 @@ export const createReservation = async (params: {
           { status: BookingStatus.CONFIRMED },
           {
             status: BookingStatus.PENDING,
-            createdAt: { gte: fifteenMinutesAgo },
+            OR: [
+              { createdAt: { gte: holdExpiry } },
+              { holdExpiresAt: { gte: new Date() } },
+            ],
           },
         ],
         AND: [{ checkIn: { lt: quote.checkOut } }, { checkOut: { gt: quote.checkIn } }],
@@ -214,6 +222,7 @@ export const createReservation = async (params: {
         specialRequests: params.specialRequests || null,
         status: BookingStatus.PENDING,
         paymentStatus: PaymentStatus.UNPAID,
+        holdExpiresAt: new Date(Date.now() + BUSINESS_CONFIG.bookingHoldMinutes * 60 * 1000),
       },
       include: {
         apartment: {

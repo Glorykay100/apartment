@@ -25,17 +25,42 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+enum SubscriberStatus {
+  PENDING
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+/// A registered user account (guest or admin).
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  fullName     String
-  phone        String?
-  role         Role      @default(GUEST)
-  bookings     Booking[]
-  reviews      Review[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id              String         @id @default(cuid())
+  email           String         @unique
+  passwordHash    String
+  fullName        String
+  phone           String?
+  role            Role           @default(GUEST)
+  emailVerified   Boolean        @default(false)
+  /// Timestamp of the last accepted Terms version (null = must accept at next login)
+  termsAcceptedAt   DateTime?
+  termsVersion       String?
+  /// Password reset token (single-use, time-limited)
+  passwordResetToken   String?
+  passwordResetExpires  DateTime?
+  bookings       Booking[]
+  reviews        Review[]
+  receipts       Receipt[]
+  consents       ConsentRecord[]
+  emailPreferences EmailPreferences?
+  subscriptions  Subscriber[]
+  emailLogs      EmailLog[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@index([email])
 }
@@ -115,8 +140,15 @@ model Booking {
   paymentStatus     PaymentStatus @default(UNPAID)
   paystackReference String?       @unique
   paystackPaidAt    DateTime?
+  /// Channel of payment (card, bank_transfer, etc.)
+  paystackChannel   String?
+  /// When the unpaid hold expires (set on creation)
+  holdExpiresAt     DateTime?
   specialRequests   String?       @db.Text
+  /// Track which emails have been sent for this booking (bitmask-like set of keys)
+  emailsSent        String[]      @default([])
   review            Review?
+  receipt           Receipt?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -165,4 +197,121 @@ model ContactMessage {
   message   String   @db.Text
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+/// Sequential receipt issued after verified payment.
+model Receipt {
+  id                String   @id @default(cuid())
+  receiptNumber     String   @unique // e.g. "RCT-2026-000001"
+  bookingId         String   @unique
+  booking           Booking  @relation(fields: [bookingId], references: [id])
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  amountPaid        Int
+  paymentDate       DateTime @default(now())
+  paystackReference String
+  channel           String?
+  guestName         String
+  guestEmail        String
+  apartmentTitle    String
+  apartmentAddress  String
+  checkIn           DateTime   @db.Date
+  checkOut          DateTime  @db.Date
+  nights            Int
+  guestCount        Int
+  nightlyRate       Int
+  subtotal          Int
+  cleaningFee       Int
+  serviceFee        Int
+  totalAmount       Int
+  pdfPath           String?   // path or key if stored externally
+  createdAt          DateTime  @default(now())
+
+  @@index([userId])
+  @@index([receiptNumber])
+}
+
+/// Email queue + log. Every email sent (or queued) gets a row here.
+model EmailLog {
+  id              String      @id @default(cuid())
+  userId          String?
+  user            User?        @relation(fields: [userId], references: [id])
+  toEmail         String
+  type            String      // welcome, booking_received, receipt, payment_reminder, etc.
+  subject         String
+  brevoMessageId  String?
+  status          EmailStatus @default(QUEUED)
+  error           String?
+  attempts        Int         @default(0)
+  nextRetryAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  sentAt         DateTime?
+
+  @@index([status, nextRetryAt])
+  @@index([toEmail])
+  @@index([userId])
+  @@index([type])
+}
+
+/// Newsletter / marketing subscriber with double opt-in.
+model Subscriber {
+  id              String          @id @default(cuid())
+  email           String          @unique
+  name            String?
+  status          SubscriberStatus @default(PENDING)
+  source          String          @default("footer_form") // footer_form, account_settings, etc.
+  confirmToken    String?         // signed HMAC token for double opt-in
+  confirmedAt     DateTime?
+  unsubscribedAt   DateTime?
+  userId          String?         // nullable — guests can subscribe too
+  user            User?           @relation(fields: [userId], references: [id])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([status])
+  @@index([email])
+}
+
+/// Per-user email preferences for marketing opt-in.
+model EmailPreferences {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+  marketingOptIn  Boolean  @default(false)
+  optInAt         DateTime?
+  optOutAt        DateTime?
+  source          String?  // "signup", "account_settings", "backfill"
+  createdAt       DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Consent records for legal documents (Terms, Privacy, Refund Policy).
+model ConsentRecord {
+  id          String   @id @default(cuid())
+  userId       String
+  user        User     @relation(fields: [userId], references: [id])
+  documentType String  // "terms", "privacy", "refund", "cookie"
+  version     String
+  ipAddress   String?
+  userAgent   String?
+  acceptedAt  DateTime @default(now())
+
+  @@index([userId, documentType])
+  @@index([version])
+}
+
+/// Idempotent webhook event store (Paystack and Brevo).
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String   // "paystack" or "brevo"
+  eventId     String   // unique event ID from provider
+  eventType   String
+  reference   String?
+  payload     Json
+  processedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([reference])
+  @@index([eventType])
 }

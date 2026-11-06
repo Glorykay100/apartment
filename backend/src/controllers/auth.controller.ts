@@ -1,12 +1,14 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { prisma } from '../config/db';
 import { signJwtToken, setAuthCookie, clearAuthCookie } from '../utils/jwt';
+import { BUSINESS_CONFIG } from '../config/business';
 import { Role } from '@prisma/client';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password, fullName, phone } = req.body;
+    const { email, password, fullName, phone, marketingConsent, termsAccepted } = req.body;
 
     const existingUser = await prisma.user.findUnique({
       where: { email },
@@ -22,6 +24,11 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
+    const marketingOptIn = Boolean(marketingConsent);
+    const acceptsTerms = Boolean(termsAccepted);
+    const ipAddress = req.ip || null;
+    const userAgent = req.headers['user-agent'] || null;
+
     const user = await prisma.user.create({
       data: {
         email,
@@ -29,6 +36,34 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         fullName,
         phone: phone || null,
         role: Role.GUEST,
+        emailVerified: false,
+        termsAcceptedAt: acceptsTerms ? new Date() : null,
+        termsVersion: acceptsTerms ? BUSINESS_CONFIG.termsVersion : null,
+        emailPreferences: {
+          create: {
+            marketingOptIn,
+            optInAt: marketingOptIn ? new Date() : null,
+            source: 'signup',
+          },
+        },
+        consents: acceptsTerms
+          ? {
+              create: [
+                {
+                  documentType: 'terms',
+                  version: BUSINESS_CONFIG.termsVersion,
+                  ipAddress,
+                  userAgent,
+                },
+                {
+                  documentType: 'privacy',
+                  version: BUSINESS_CONFIG.privacyVersion,
+                  ipAddress,
+                  userAgent,
+                },
+              ],
+            }
+          : undefined,
       },
       select: {
         id: true,
@@ -169,15 +204,91 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
+
     const user = await prisma.user.findUnique({ where: { email } });
 
-    // Always respond with success message to prevent user enumeration
+    // Always return 200 to prevent user enumeration
+    if (user) {
+      // Generate raw token (sent to user via email)
+      const rawToken = crypto.randomBytes(32).toString('hex');
+
+      // Hash the token for storage (so a DB leak doesn't expose valid reset tokens)
+      const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+      // Set expiry to 1 hour from now
+      const expires = new Date(Date.now() + 60 * 60 * 1000);
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordResetToken: hashedToken,
+          passwordResetExpires: expires,
+        },
+      });
+
+      // Build reset link with the raw (unhashed) token
+      const resetLink = `${BUSINESS_CONFIG.websiteUrl}/reset-password?token=${rawToken}`;
+
+      // TODO: Replace with Brevo email service once integrated
+      // For now, log the link so it can be retrieved during development/testing
+      console.log(`📧 [Password Reset] Reset link for ${email}: ${resetLink}`);
+    }
+
     res.status(200).json({
       success: true,
       message:
         'If an account with that email exists, password reset instructions have been sent.',
     });
   } catch (error) {
+    console.error('Forgot password error:', error);
     res.status(500).json({ success: false, message: 'Password reset request failed.' });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token, password } = req.body;
+
+    // Hash the incoming token to compare with the stored hash
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Find user by hashed token that hasn't expired
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetToken: hashedToken,
+        passwordResetExpires: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    if (!user) {
+      res.status(400).json({
+        success: false,
+        message: 'Password reset token is invalid or has expired.',
+      });
+      return;
+    }
+
+    // Hash the new password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Update password and clear the reset token + expiry
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password has been successfully reset. Please log in with your new password.',
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ success: false, message: 'Failed to reset password.' });
   }
 };
