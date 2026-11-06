@@ -5,6 +5,7 @@ import {
   getBookingByReference,
   getMyBookings,
   cancelBooking,
+  completePayment,
 } from '../controllers/booking.controller';
 import { validate } from '../middleware/validate';
 import { optionalAuth, authenticate } from '../middleware/auth';
@@ -20,5 +21,6 @@ bookingRouter.post('/', optionalAuth, validate(createBookingSchema), createBooki
 bookingRouter.get('/my-bookings', authenticate, getMyBookings);
 bookingRouter.get('/:reference', getBookingByReference);
 bookingRouter.post('/:id/cancel', authenticate, cancelBooking);
+bookingRouter.post('/:reference/complete-payment', completePayment);
 
 export default bookingRouter;

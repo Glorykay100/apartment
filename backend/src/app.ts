@@ -9,6 +9,8 @@ import contactRouter from './routes/contact.routes';
 import bookingRouter from './routes/booking.routes';
 import paymentRouter from './routes/payment.routes';
 import newsletterRouter from './routes/newsletter.routes';
+import adminRouter from './routes/admin.routes';
+import reviewRouter from './routes/review.routes';
 
 export const app = express();
 
@@ -51,6 +53,8 @@ app.use('/api/v1/contact', contactRouter);
 app.use('/api/v1/bookings', bookingRouter);
 app.use('/api/v1/payments', paymentRouter);
 app.use('/api/v1/newsletter', newsletterRouter);
+app.use('/api/v1/admin', adminRouter);
+app.use('/api/v1/reviews', reviewRouter);
 
 // 404 Route Handler
 app.use((_req: Request, res: Response) => {

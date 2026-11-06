@@ -6,6 +6,7 @@ import {
   logout,
   getMe,
   forgotPassword,
+  resetPassword,
 } from '../controllers/auth.controller';
 import { validate } from '../middleware/validate';
 import { authenticate } from '../middleware/auth';
@@ -13,6 +14,7 @@ import {
   registerSchema,
   loginSchema,
   forgotPasswordSchema,
+  resetPasswordSchema,
 } from '../validations/auth.validation';
 
 const authRouter = Router();
@@ -38,6 +40,12 @@ authRouter.post(
   authLimiter,
   validate(forgotPasswordSchema),
   forgotPassword
+);
+authRouter.post(
+  '/reset-password',
+  authLimiter,
+  validate(resetPasswordSchema),
+  resetPassword
 );
 
 export default authRouter;
