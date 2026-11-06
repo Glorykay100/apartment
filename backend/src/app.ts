@@ -11,6 +11,7 @@ import paymentRouter from './routes/payment.routes';
 import newsletterRouter from './routes/newsletter.routes';
 import adminRouter from './routes/admin.routes';
 import reviewRouter from './routes/review.routes';
+import consentRouter from './routes/consent.routes';
 
 export const app = express();
 
@@ -55,6 +56,7 @@ app.use('/api/v1/payments', paymentRouter);
 app.use('/api/v1/newsletter', newsletterRouter);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1/reviews', reviewRouter);
+app.use('/api/v1/consent', consentRouter);
 
 // 404 Route Handler
 app.use((_req: Request, res: Response) => {
