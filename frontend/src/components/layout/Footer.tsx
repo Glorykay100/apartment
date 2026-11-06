@@ -1,4 +1,6 @@
-import React from 'react';
+'use client';
+
+import React, { useState } from 'react';
 import Link from 'next/link';
 import {
   ShieldCheck,
@@ -9,8 +11,34 @@ import {
   Clock,
   ArrowRight,
 } from 'lucide-react';
+import { api } from '@/lib/api';
 
 export const Footer: React.FC = () => {
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+
+  const handleNewsletterSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setStatus('error');
+      setMessage('Please enter your email address.');
+      return;
+    }
+
+    try {
+      await api.post('/newsletter/subscribe', { email: trimmedEmail });
+      setStatus('success');
+      setMessage('You are subscribed to Yahsab updates.');
+      setEmail('');
+    } catch (error: any) {
+      setStatus('error');
+      setMessage(error.message || 'Unable to subscribe right now.');
+    }
+  };
+
   return (
     <footer className="border-t border-linen bg-sand-200 text-charcoal-900 transition-colors">
       {/* Upper Hospitality Highlights */}
@@ -132,50 +160,83 @@ export const Footer: React.FC = () => {
             </p>
             <ul className="space-y-2.5 text-sm text-charcoal-700">
               <li>
-                <Link href="/terms#cancellation" className="hover:text-terracotta-500 transition-colors">
-                  Cancellation Policy
-                </Link>
-              </li>
-              <li>
-                <Link href="/terms#house-rules" className="hover:text-terracotta-500 transition-colors">
-                  House Rules & Quiet Hours
-                </Link>
-              </li>
-              <li>
-                <Link href="/terms#check-in" className="hover:text-terracotta-500 transition-colors">
-                  Check-in Guidelines
-                </Link>
-              </li>
-              <li>
                 <Link href="/terms" className="hover:text-terracotta-500 transition-colors">
                   Terms & Conditions
                 </Link>
               </li>
               <li>
-                <Link href="/contact" className="hover:text-terracotta-500 transition-colors">
-                  Frequently Asked Questions
+                <Link href="/refund-policy" className="hover:text-terracotta-500 transition-colors">
+                  Refund Policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy" className="hover:text-terracotta-500 transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/cookies" className="hover:text-terracotta-500 transition-colors">
+                  Cookie Policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/cookies" className="hover:text-terracotta-500 transition-colors">
+                  Cookie settings
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Contact Details */}
-          <div className="space-y-3">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-forest-900">
-              Direct Contact
-            </p>
-            <div className="space-y-3 text-sm text-charcoal-700">
-              <div className="flex items-start gap-2.5">
-                <MapPin className="w-4 h-4 text-terracotta-500 shrink-0 mt-0.5" />
-                <span>Plot 14, River Benue Crescent, Old GRA, Makurdi</span>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <Phone className="w-4 h-4 text-terracotta-500 shrink-0" />
-                <span>+234 (0) 803 123 4567</span>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <Mail className="w-4 h-4 text-terracotta-500 shrink-0" />
-                <span>reservations@yahsab.com</span>
+          {/* Newsletter & Contact */}
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-forest-900">
+                Subscribe
+              </p>
+              <form onSubmit={handleNewsletterSubmit} className="space-y-3">
+                <label className="sr-only" htmlFor="newsletter-email">
+                  Email address
+                </label>
+                <input
+                  id="newsletter-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="Your email address"
+                  className="w-full rounded-xl border border-linen bg-white px-3 py-2.5 text-sm text-forest-900 placeholder:text-charcoal-400 focus:outline-none focus:ring-2 focus:ring-terracotta-500/40"
+                />
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-xl bg-forest-900 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-sand-50 transition-colors hover:bg-forest-800"
+                >
+                  Get updates
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </form>
+              {status !== 'idle' && (
+                <p className={status === 'success' ? 'text-xs text-emerald-700' : 'text-xs text-red-700'}>
+                  {message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-forest-900">
+                Direct Contact
+              </p>
+              <div className="space-y-3 text-sm text-charcoal-700">
+                <div className="flex items-start gap-2.5">
+                  <MapPin className="w-4 h-4 text-terracotta-500 shrink-0 mt-0.5" />
+                  <span>Plot 14, River Benue Crescent, Old GRA, Makurdi</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Phone className="w-4 h-4 text-terracotta-500 shrink-0" />
+                  <span>+234 (0) 803 123 4567</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Mail className="w-4 h-4 text-terracotta-500 shrink-0" />
+                  <span>reservations@yahsab.com</span>
+                </div>
               </div>
             </div>
           </div>
@@ -185,7 +246,7 @@ export const Footer: React.FC = () => {
         <div className="mt-12 border-t border-linen pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-charcoal-700 gap-4">
           <p>© {new Date().getFullYear()} Yahsab Luxury Apartments & Suites. All rights reserved.</p>
           <p className="flex items-center gap-1">
-            Currency: <span className="font-semibold text-forest-900">Nigerian Naira (₦)</span> • Timezone: <span className="font-semibold text-forest-900">Africa/Lagos</span>
+            Currency: <span className="font-semibold text-forest-900">Nigerian Naira (₦)</span> • Timezone: <span className="font-semibold text-forest-900">WAT • Africa/Lagos</span>
           </p>
         </div>
       </div>

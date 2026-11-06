@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Yahsab icon">
+  <rect width="64" height="64" rx="16" fill="#132B22"/>
+  <path d="M16 22.5L32 12l16 10.5v18.9L32 52 16 41.4V22.5zm4.6 2.7v14.4L32 45l11.4-5.4V25.2L32 19.8 20.6 25.2z" fill="#F5F2EA"/>
+  <text x="32" y="39" text-anchor="middle" font-size="18" font-family="Georgia, serif" fill="#C25E3B" font-weight="700">Y</text>
+</svg>

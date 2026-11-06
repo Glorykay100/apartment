@@ -131,6 +131,10 @@ export const BookingSidebar: React.FC<BookingSidebarProps> = ({ apartment }) => 
         </div>
       </div>
 
+      <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-[11px] leading-relaxed text-red-700">
+        Booking is final and non-refundable once payment is confirmed.
+      </div>
+
       {/* Date & Guest Inputs */}
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-linen p-2 bg-sand-50/60">

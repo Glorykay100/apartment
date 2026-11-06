@@ -18,7 +18,7 @@ const faqs: FaqItem[] = [
   {
     question: 'What is the Yahsab cancellation and refund policy?',
     answer:
-      'We offer full refunds (100%) for reservations cancelled at least 5 full days prior to the scheduled 14:00 check-in time. For cancellations made between 48 hours and 5 days prior to check-in, a 50% refund is issued. Cancellations within 48 hours of check-in are non-refundable to protect host preparation costs.',
+      'All bookings are final and non-refundable once payment is confirmed unless Yahsab grants a written exception at its sole discretion. Guests may cancel to release dates, but no automatic refund is issued.',
   },
   {
     question: 'Are 24/7 power and high-speed internet truly guaranteed in Makurdi?',

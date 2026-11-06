@@ -84,6 +84,7 @@ function CheckoutContent() {
   const [phone, setPhone] = useState(user?.phone || '');
   const [specialRequests, setSpecialRequests] = useState('');
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
+  const [acceptsRefundPolicy, setAcceptsRefundPolicy] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -146,6 +147,10 @@ function CheckoutContent() {
   const handleSubmitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quote || quoteError) return;
+    if (!acceptsRefundPolicy) {
+      setSubmitError('You must confirm that this booking is non-refundable before continuing to payment.');
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitError(null);
@@ -161,6 +166,7 @@ function CheckoutContent() {
         guestPhone: phone,
         specialRequests,
         addOnsTotal,
+        acceptsNonRefundPolicy: acceptsRefundPolicy,
       });
 
       if (res.data?.success && res.data?.data?.booking) {
@@ -359,6 +365,24 @@ function CheckoutContent() {
             </div>
           </div>
 
+          <div className="rounded-2xl border border-linen bg-sand-50 p-4 text-xs text-charcoal-700">
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={acceptsRefundPolicy}
+                onChange={(e) => setAcceptsRefundPolicy(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                I understand that this booking is non-refundable and I agree to the{' '}
+                <Link href="/refund-policy" target="_blank" rel="noreferrer" className="font-semibold text-terracotta-600 underline underline-offset-2">
+                  Refund Policy
+                </Link>
+                .
+              </span>
+            </label>
+          </div>
+
           <Button
             type="submit"
             variant="accent"
@@ -366,6 +390,7 @@ function CheckoutContent() {
             className="w-full shadow-elevated"
             isLoading={isSubmitting}
             leftIcon={<Lock className="w-4 h-4" />}
+            disabled={!acceptsRefundPolicy}
           >
             Continue to Secure Paystack Checkout
           </Button>
@@ -413,6 +438,10 @@ function CheckoutContent() {
                   {formatDateRange(checkIn!, checkOut!)} ({quote.nights}{' '}
                   {quote.nights === 1 ? 'night' : 'nights'})
                 </span>
+              </div>
+
+              <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-[11px] leading-relaxed text-red-700">
+                All bookings are final and non-refundable once payment is confirmed. Please review the <Link href="/refund-policy" className="font-semibold underline underline-offset-2">refund policy</Link> before paying.
               </div>
 
               <div className="flex items-center justify-between">

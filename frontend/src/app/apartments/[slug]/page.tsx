@@ -166,6 +166,10 @@ export default function ApartmentDetailPage() {
                 {apartment.address}
               </p>
 
+              <div className="mt-4 inline-flex items-center rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-red-700">
+                Final and non-refundable after payment
+              </div>
+
               {/* Specs Bar */}
               <div className="mt-6 flex flex-wrap items-center gap-6 rounded-2xl border border-linen bg-white p-4 text-xs text-charcoal-700 shadow-2xs">
                 <span className="flex items-center gap-2">

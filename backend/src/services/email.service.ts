@@ -1,19 +1,156 @@
 import nodemailer from 'nodemailer';
 import { Booking, Apartment } from '@prisma/client';
+import { Request, Response } from 'express';
+import { prisma } from '../config/db';
+
+const getTransporter = () =>
+  nodemailer.createTransport({
+    host: process.env.BREVO_SMTP_HOST || process.env.SMTP_HOST || 'smtp.mailtrap.io',
+    port: Number(process.env.BREVO_SMTP_PORT || process.env.SMTP_PORT) || 2525,
+    secure: Number(process.env.BREVO_SMTP_PORT || process.env.SMTP_PORT) === 465,
+    auth: {
+      user:
+        process.env.BREVO_SMTP_USER ||
+        process.env.SMTP_USER ||
+        'mock_user',
+      pass:
+        process.env.BREVO_SMTP_PASSWORD ||
+        process.env.SMTP_PASS ||
+        'mock_pass',
+    },
+  });
+
+const sendTransactionalEmail = async ({
+  to,
+  subject,
+  html,
+  text,
+  from,
+}: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  from?: string;
+}) => {
+  const sender = from || process.env.BREVO_FROM || process.env.EMAIL_FROM || 'reservations@yahsab.com';
+
+  if (process.env.NODE_ENV === 'test') {
+    console.log(`📧 [Simulated Email] ${subject} -> ${to}`);
+    return true;
+  }
+
+  const transporter = getTransporter();
+  const hasRealCredentials =
+    (process.env.BREVO_SMTP_HOST || process.env.SMTP_HOST) &&
+    (process.env.BREVO_SMTP_USER || process.env.SMTP_USER);
+
+  if (!hasRealCredentials) {
+    console.log(`📧 [Simulated Email] ${subject} -> ${to}`);
+    return true;
+  }
+
+  await transporter.sendMail({
+    from: sender,
+    to,
+    subject,
+    html,
+    text,
+  });
+
+  return true;
+};
+
+const ensureNewsletterTable = async () => {
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      email TEXT NOT NULL UNIQUE,
+      full_name TEXT,
+      subscribed BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+};
+
+export const subscribeNewsletter = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const fullName = String(req.body?.fullName || '').trim();
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ success: false, message: 'A valid email address is required.' });
+      return;
+    }
+
+    await ensureNewsletterTable();
+
+    await prisma.$executeRaw`
+      INSERT INTO newsletter_subscribers (email, full_name, subscribed, created_at, updated_at)
+      VALUES (${email}, ${fullName || null}, true, NOW(), NOW())
+      ON CONFLICT (email)
+      DO UPDATE SET full_name = EXCLUDED.full_name, subscribed = true, updated_at = NOW()
+    `;
+
+    await sendTransactionalEmail({
+      to: email,
+      subject: 'Welcome to Yahsab updates',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px; background: #FBF9F5; border-radius: 12px; color: #132B22;">
+          <h2 style="margin: 0 0 12px; color: #132B22;">Welcome to Yahsab</h2>
+          <p style="line-height: 1.6; color: #2D403B;">
+            Thanks for subscribing to Yahsab updates. You will now receive property updates, seasonal offers, and travel inspiration from our team.
+          </p>
+          <p style="line-height: 1.6; color: #2D403B;">
+            Need to opt out later? You can unsubscribe anytime from the footer or by contacting us directly.
+          </p>
+        </div>
+      `,
+      text: 'Welcome to Yahsab updates. You will now receive curated property updates and exclusive offers.',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'You have been subscribed to Yahsab updates.',
+    });
+  } catch (error) {
+    console.error('Newsletter subscribe error:', error);
+    res.status(500).json({ success: false, message: 'Failed to subscribe to updates.' });
+  }
+};
+
+export const unsubscribeNewsletter = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ success: false, message: 'A valid email address is required.' });
+      return;
+    }
+
+    await ensureNewsletterTable();
+
+    await prisma.$executeRaw`
+      UPDATE newsletter_subscribers
+      SET subscribed = false, updated_at = NOW()
+      WHERE email = ${email}
+    `;
+
+    res.status(200).json({
+      success: true,
+      message: 'You have been unsubscribed from Yahsab updates.',
+    });
+  } catch (error) {
+    console.error('Newsletter unsubscribe error:', error);
+    res.status(500).json({ success: false, message: 'Failed to unsubscribe from updates.' });
+  }
+};
 
 export const sendBookingConfirmationEmail = async (
   booking: Booking & { apartment: Apartment }
 ) => {
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.mailtrap.io',
-      port: Number(process.env.SMTP_PORT) || 2525,
-      auth: {
-        user: process.env.SMTP_USER || 'mock_user',
-        pass: process.env.SMTP_PASS || 'mock_pass',
-      },
-    });
-
     const checkInDate = new Date(booking.checkIn).toLocaleDateString('en-GB', {
       weekday: 'short',
       day: 'numeric',
@@ -94,19 +231,13 @@ export const sendBookingConfirmationEmail = async (
       </div>
     `;
 
-    // Only attempt actual transport if valid host is configured
-    if (process.env.SMTP_HOST && !process.env.SMTP_HOST.includes('mailtrap.io')) {
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM || 'reservations@yahsab.com',
-        to: booking.guestEmail,
-        subject: `Confirmed: Your Stay at ${booking.apartment.title} [${booking.reference}]`,
-        html: htmlContent,
-      });
-    } else {
-      console.log(
-        `📧 [Simulated Email] Booking confirmation sent to ${booking.guestEmail} for reference ${booking.reference}`
-      );
-    }
+    await sendTransactionalEmail({
+      to: booking.guestEmail,
+      from: process.env.BREVO_FROM || process.env.EMAIL_FROM || 'reservations@yahsab.com',
+      subject: `Confirmed: Your Stay at ${booking.apartment.title} [${booking.reference}]`,
+      html: htmlContent,
+      text: `Your reservation at ${booking.apartment.title} has been confirmed. Booking reference: ${booking.reference}`,
+    });
   } catch (error) {
     console.error('Email confirmation error (non-fatal):', error);
   }

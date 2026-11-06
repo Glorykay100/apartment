@@ -11,6 +11,120 @@ import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Users, Bed, Bath, Star, ArrowRight, MapPin } from 'lucide-react';
 
+const FALLBACK_FEATURED_APARTMENTS: Apartment[] = [
+  {
+    id: 'fallback-1',
+    slug: 'the-benue-terrace-penthouse',
+    title: 'The Benue Terrace Penthouse',
+    headline: 'Panoramic river views and private terrace living in Makurdi.',
+    description: 'A refined penthouse with a wrap-around terrace and premium city views.',
+    address: 'Plot 14, River Benue Crescent, Old GRA',
+    city: 'Makurdi',
+    state: 'Benue',
+    basePricePerNight: 85000,
+    cleaningFee: 8000,
+    serviceFeeRate: 0.05,
+    bedrooms: 3,
+    bathrooms: 3,
+    maxGuests: 6,
+    sqft: 2200,
+    isFeatured: true,
+    isPublished: true,
+    checkInTime: '14:00',
+    checkOutTime: '11:00',
+    houseRules: ['No smoking indoors', 'Quiet hours after 10 PM'],
+    images: [
+      {
+        id: 'fallback-1-image',
+        apartmentId: 'fallback-1',
+        url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1400&q=80',
+        caption: 'Terrace lounge with a panoramic river view',
+        isPrimary: true,
+        order: 0,
+      },
+    ],
+    amenities: [],
+    rating: 4.9,
+    reviewCount: 28,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'fallback-2',
+    slug: 'high-level-executive-suite',
+    title: 'High-Level Executive Suite',
+    headline: 'Minimalist comfort designed for smart business travel and stays.',
+    description: 'Executive living with Starlink connectivity, smart lighting, and city convenience.',
+    address: '22 Kashim Ibrahim Road, High-Level',
+    city: 'Makurdi',
+    state: 'Benue',
+    basePricePerNight: 35000,
+    cleaningFee: 4000,
+    serviceFeeRate: 0.05,
+    bedrooms: 1,
+    bathrooms: 1,
+    maxGuests: 2,
+    sqft: 650,
+    isFeatured: true,
+    isPublished: true,
+    checkInTime: '13:00',
+    checkOutTime: '11:00',
+    houseRules: ['Quiet residential environment', 'Valid ID required'],
+    images: [
+      {
+        id: 'fallback-2-image',
+        apartmentId: 'fallback-2',
+        url: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1400&q=80',
+        caption: 'Executive suite bedroom and lounge',
+        isPrimary: true,
+        order: 0,
+      },
+    ],
+    amenities: [],
+    rating: 4.8,
+    reviewCount: 19,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'fallback-3',
+    slug: 'judges-quarters-garden-villa',
+    title: 'Judges Quarters Garden Villa',
+    headline: 'A secluded coastal-inspired villa wrapped in tropical greenery.',
+    description: 'Private garden villa with shaded patio, quiet surroundings, and refined interior finishes.',
+    address: '8 Judges Quarters Road, Makurdi',
+    city: 'Makurdi',
+    state: 'Benue',
+    basePricePerNight: 56000,
+    cleaningFee: 5500,
+    serviceFeeRate: 0.05,
+    bedrooms: 2,
+    bathrooms: 2,
+    maxGuests: 4,
+    sqft: 1500,
+    isFeatured: true,
+    isPublished: true,
+    checkInTime: '14:00',
+    checkOutTime: '11:00',
+    houseRules: ['No parties after 9 PM', 'Private outdoor patio use only'],
+    images: [
+      {
+        id: 'fallback-3-image',
+        apartmentId: 'fallback-3',
+        url: 'https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1400&q=80',
+        caption: 'Garden villa entrance with private patio',
+        isPrimary: true,
+        order: 0,
+      },
+    ],
+    amenities: [],
+    rating: 4.7,
+    reviewCount: 15,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+] as Apartment[];
+
 export const FeaturedListings: React.FC = () => {
   const [apartments, setApartments] = useState<Apartment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -19,11 +133,17 @@ export const FeaturedListings: React.FC = () => {
     const fetchFeatured = async () => {
       try {
         const res = await api.get('/apartments/featured');
-        if (res.data?.success && res.data?.data?.apartments) {
-          setApartments(res.data.data.apartments);
+        const fetchedApartments = res.data?.data?.apartments;
+
+        if (Array.isArray(fetchedApartments) && fetchedApartments.length > 0) {
+          setApartments(fetchedApartments);
+          return;
         }
+
+        setApartments(FALLBACK_FEATURED_APARTMENTS);
       } catch (err) {
         console.error('Error loading featured apartments:', err);
+        setApartments(FALLBACK_FEATURED_APARTMENTS);
       } finally {
         setIsLoading(false);
       }

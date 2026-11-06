@@ -16,5 +16,11 @@ export const createBookingSchema = z.object({
   guestEmail: z.string().email('Valid email is required').toLowerCase(),
   guestPhone: z.string().min(7, 'Valid phone number is required'),
   specialRequests: z.string().optional(),
-  addOnsTotal: z.coerce.number().min(0).default(0), // Optional selected concierge add-ons
+  addOnsTotal: z.coerce.number().min(0).default(0),
+  acceptsNonRefundPolicy: z
+    .boolean()
+    .optional()
+    .refine((value) => value !== false, {
+      message: 'You must accept the non-refundable booking policy before booking.',
+    }),
 });
