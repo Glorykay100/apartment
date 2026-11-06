@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 
 const COOKIE_NAME = 'yahsab_cookie_consent';
 
-type ConsentPrefs = {
+export type ConsentPrefs = {
   necessary: true;
   analytics: boolean;
   marketing: boolean;
@@ -18,7 +18,7 @@ const defaultPrefs: ConsentPrefs = {
   marketing: false,
 };
 
-const readConsent = (): ConsentPrefs | null => {
+export const readConsent = (): ConsentPrefs | null => {
   if (typeof document === 'undefined') return null;
 
   const cookieValue = document.cookie
@@ -57,6 +57,17 @@ export const CookieConsent: React.FC = () => {
     } else {
       setIsOpen(true);
     }
+
+    // Listen for "reopen" events from the footer "Cookie settings" link
+    const handleReopen = () => {
+      const stored = readConsent();
+      setPreferences(stored || defaultPrefs);
+      setShowPreferences(true);
+      setIsOpen(true);
+    };
+
+    window.addEventListener('yahsab:open-cookie-settings', handleReopen);
+    return () => window.removeEventListener('yahsab:open-cookie-settings', handleReopen);
   }, []);
 
   const save = (next: ConsentPrefs) => {

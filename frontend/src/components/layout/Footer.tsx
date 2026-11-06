@@ -180,9 +180,17 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link href="/cookies" className="hover:text-terracotta-500 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new Event('yahsab:open-cookie-settings'));
+                    }
+                  }}
+                  className="hover:text-terracotta-500 transition-colors text-sm"
+                >
                   Cookie settings
-                </Link>
+                </button>
               </li>
             </ul>
           </div>
