@@ -8,6 +8,7 @@ import apartmentRouter from './routes/apartment.routes';
 import contactRouter from './routes/contact.routes';
 import bookingRouter from './routes/booking.routes';
 import paymentRouter from './routes/payment.routes';
+import newsletterRouter from './routes/newsletter.routes';
 
 export const app = express();
 
@@ -24,6 +25,7 @@ app.use(
 
 // Parsers & logging
 app.use(cookieParser(process.env.COOKIE_SECRET || 'yahsab-default-cookie-secret'));
+app.use('/api/v1/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -48,6 +50,7 @@ app.use('/api/v1/apartments', apartmentRouter);
 app.use('/api/v1/contact', contactRouter);
 app.use('/api/v1/bookings', bookingRouter);
 app.use('/api/v1/payments', paymentRouter);
+app.use('/api/v1/newsletter', newsletterRouter);
 
 // 404 Route Handler
 app.use((_req: Request, res: Response) => {

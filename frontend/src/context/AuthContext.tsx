@@ -28,6 +28,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const fetchCurrentUser = async () => {
+    if (typeof window !== 'undefined') {
+      const storedToken = localStorage.getItem('yahsab_token');
+      if (!storedToken) {
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+    }
+
     try {
       const res = await api.get('/auth/me');
       if (res.data?.success && res.data?.data?.user) {
@@ -35,7 +44,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       } else {
         setUser(null);
       }
-    } catch {
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status !== 401 && status !== 403) {
+        console.error('Failed to refresh auth user:', error);
+      }
       setUser(null);
       if (typeof window !== 'undefined') {
         localStorage.removeItem('yahsab_token');

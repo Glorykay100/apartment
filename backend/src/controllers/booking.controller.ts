@@ -39,6 +39,14 @@ export const calculateQuote = async (req: Request, res: Response): Promise<void>
 
 export const createBooking = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (req.body.acceptsNonRefundPolicy === false) {
+      res.status(400).json({
+        success: false,
+        message: 'You must accept the non-refundable booking policy before booking.',
+      });
+      return;
+    }
+
     const booking = await createReservation({
       ...req.body,
       userId: req.user?.id,
@@ -154,14 +162,8 @@ export const cancelBooking = async (req: Request, res: Response): Promise<void> 
     const checkIn = new Date(booking.checkIn);
     const diffHours = (checkIn.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-    let refundStatus: string;
-    if (diffHours >= 120) {
-      refundStatus = 'Eligible for 100% full refund under 5-day cancellation policy';
-    } else if (diffHours >= 48) {
-      refundStatus = 'Eligible for 50% refund under 48-hour policy';
-    } else {
-      refundStatus = 'Non-refundable under 48-hour policy (cleaning fee will be credited)';
-    }
+    let refundStatus =
+      'All confirmed bookings are final and non-refundable. Yahsab may offer a written exception at its sole discretion only.';
 
     const updated = await prisma.booking.update({
       where: { id },

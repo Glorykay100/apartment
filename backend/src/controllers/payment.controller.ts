@@ -8,6 +8,46 @@ import {
 import { sendBookingConfirmationEmail } from '../services/email.service';
 import { BookingStatus, PaymentStatus } from '@prisma/client';
 
+const ensureWebhookEventTable = async () => {
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS webhook_events (
+      id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      reference TEXT,
+      payload JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+};
+
+const isDuplicateWebhook = async (eventId: string, reference?: string | null) => {
+  await ensureWebhookEventTable();
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM webhook_events
+    WHERE id = ${eventId}
+       OR (reference = ${reference} AND event_type = 'charge.success')
+    LIMIT 1
+  `;
+
+  return rows.length > 0;
+};
+
+const recordWebhookEvent = async (event: any) => {
+  await ensureWebhookEventTable();
+  const eventId = String(
+    event?.id ||
+      `${event?.event || 'paystack'}:${event?.data?.reference || event?.data?.metadata?.bookingReference || Date.now()}`
+  );
+  const reference = event?.data?.reference || event?.data?.metadata?.bookingReference || null;
+
+  await prisma.$executeRaw`
+    INSERT INTO webhook_events (id, event_type, reference, payload, created_at)
+    VALUES (${eventId}, ${event?.event || 'unknown'}, ${reference}, ${JSON.stringify(event)}::jsonb, NOW())
+    ON CONFLICT (id) DO NOTHING
+  `;
+};
+
 export const initializePayment = async (
   req: Request,
   res: Response
@@ -43,7 +83,7 @@ export const initializePayment = async (
 
     const paystackData = await initializePaystackTransaction({
       email: booking.guestEmail,
-      amountInKobo: booking.totalAmount * 100, // Paystack operates in kobo
+      amountInKobo: booking.totalAmount * 100,
       reference: `PSTK_${booking.reference}_${Date.now()}`,
       callbackUrl,
       metadata: {
@@ -54,7 +94,6 @@ export const initializePayment = async (
       },
     });
 
-    // Save paystack reference on booking
     await prisma.booking.update({
       where: { id: booking.id },
       data: {
@@ -85,7 +124,6 @@ export const verifyPayment = async (
       return;
     }
 
-    // Locate booking by reference or paystackReference
     const booking = await prisma.booking.findFirst({
       where: {
         OR: [{ reference }, { paystackReference: reference }],
@@ -98,7 +136,6 @@ export const verifyPayment = async (
       return;
     }
 
-    // If already confirmed, return idempotently
     if (booking.status === BookingStatus.CONFIRMED && booking.paymentStatus === PaymentStatus.PAID) {
       res.status(200).json({
         success: true,
@@ -108,7 +145,6 @@ export const verifyPayment = async (
       return;
     }
 
-    // Verify transaction through Paystack API
     const verification = await verifyPaystackTransaction(reference);
 
     if (verification.status === 'success') {
@@ -122,7 +158,6 @@ export const verifyPayment = async (
         include: { apartment: true },
       });
 
-      // Send email confirmation
       await sendBookingConfirmationEmail(updated);
 
       res.status(200).json({
@@ -147,24 +182,41 @@ export const handlePaystackWebhook = async (
   res: Response
 ): Promise<void> => {
   try {
-    const signature = req.headers['x-paystack-signature'] as string;
+    const signature = String(req.headers['x-paystack-signature'] || '');
+    const rawBody = req.body;
 
-    // Validate signature
-    const isValid = verifyPaystackWebhookSignature(
-      signature || '',
-      JSON.stringify(req.body)
-    );
+    if (!rawBody || !signature) {
+      res.status(401).send('Missing Paystack signature or payload');
+      return;
+    }
 
-    if (!isValid && process.env.NODE_ENV === 'production') {
+    const rawPayload = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(JSON.stringify(rawBody));
+    if (!verifyPaystackWebhookSignature(signature, rawPayload)) {
       res.status(401).send('Invalid signature');
       return;
     }
 
-    const event = req.body;
+    const event = Buffer.isBuffer(rawBody) ? JSON.parse(rawBody.toString('utf8')) : rawBody;
+    if (!event || !event.event) {
+      res.status(400).send('Invalid Paystack payload');
+      return;
+    }
+
+    const eventId = String(
+      event.id || `${event.event}:${event.data?.reference || event.data?.metadata?.bookingReference || Date.now()}`
+    );
+    const bookingReference = event.data?.metadata?.bookingReference || event.data?.reference || null;
+
+    if (await isDuplicateWebhook(eventId, bookingReference)) {
+      res.status(200).send('Webhook already processed');
+      return;
+    }
+
+    await recordWebhookEvent(event);
 
     if (event.event === 'charge.success') {
       const { reference, metadata } = event.data;
-      const bookingRef = metadata?.bookingReference;
+      const bookingRef = metadata?.bookingReference || bookingReference;
 
       if (bookingRef) {
         const booking = await prisma.booking.findUnique({
