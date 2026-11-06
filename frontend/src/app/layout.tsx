@@ -4,6 +4,7 @@ import { AuthProvider } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { CookieConsent } from '@/components/layout/CookieConsent';
+import { TermsReacceptModal } from '@/components/layout/TermsReacceptModal';
 
 export const metadata: Metadata = {
   title: 'Yahsab Luxury Apartments & Suites | Makurdi & Abuja, Nigeria',
@@ -27,6 +28,7 @@ export default function RootLayout({
           <div className="flex-1">{children}</div>
           <Footer />
           <CookieConsent />
+          <TermsReacceptModal />
         </AuthProvider>
       </body>
     </html>
