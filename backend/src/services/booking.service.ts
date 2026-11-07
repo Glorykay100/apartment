@@ -60,6 +60,7 @@ export const calculateQuoteDetails = async (
   }
 
   // Check for collision with CONFIRMED bookings or active PENDING bookings (not expired)
+  const now = new Date();
   const holdExpiry = new Date(Date.now() - BUSINESS_CONFIG.bookingHoldMinutes * 60 * 1000);
   const overlappingBooking = await prisma.booking.findFirst({
     where: {
@@ -68,10 +69,11 @@ export const calculateQuoteDetails = async (
         { status: BookingStatus.CONFIRMED },
         {
           status: BookingStatus.PENDING,
-          // Active pending = either created recently OR has a holdExpiresAt in the future
+          // Active pending = has an unexpired hold, or (legacy rows with no
+          // hold timestamp) was created within the hold window
           OR: [
-            { createdAt: { gte: holdExpiry } },
-            { holdExpiresAt: { gte: new Date() } },
+            { holdExpiresAt: { gte: now } },
+            { holdExpiresAt: null, createdAt: { gte: holdExpiry } },
           ],
         },
       ],
@@ -176,6 +178,7 @@ export const createReservation = async (params: {
   // Execute atomic transaction with double-booking lock check
   const booking = await prisma.$transaction(async (tx) => {
     // Re-verify collision within transaction to handle race conditions
+    const now = new Date();
     const holdExpiry = new Date(Date.now() - BUSINESS_CONFIG.bookingHoldMinutes * 60 * 1000);
     const collision = await tx.booking.findFirst({
       where: {
@@ -185,8 +188,8 @@ export const createReservation = async (params: {
           {
             status: BookingStatus.PENDING,
             OR: [
-              { createdAt: { gte: holdExpiry } },
-              { holdExpiresAt: { gte: new Date() } },
+              { holdExpiresAt: { gte: now } },
+              { holdExpiresAt: null, createdAt: { gte: holdExpiry } },
             ],
           },
         ],

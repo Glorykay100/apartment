@@ -4,49 +4,50 @@ import {
   initializePaystackTransaction,
   verifyPaystackTransaction,
   verifyPaystackWebhookSignature,
+  generateUniqueReference,
 } from '../services/paystack.service';
 import { sendBookingConfirmationEmail } from '../services/email.service';
 import { BookingStatus, PaymentStatus } from '@prisma/client';
+import { BUSINESS_CONFIG } from '../config/business';
 
-const ensureWebhookEventTable = async () => {
-  await prisma.$executeRaw`
-    CREATE TABLE IF NOT EXISTS webhook_events (
-      id TEXT PRIMARY KEY,
-      event_type TEXT NOT NULL,
-      reference TEXT,
-      payload JSONB NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `;
+// ─── Helpers ─────────────────────────────────────────────────────
+
+/**
+ * Check for duplicate webhook using the Prisma WebhookEvent model.
+ */
+const isDuplicateWebhook = async (eventId: string): Promise<boolean> => {
+  const existing = await prisma.webhookEvent.findUnique({
+    where: {
+      provider_eventId: { provider: 'paystack', eventId },
+    },
+  });
+  return !!existing;
 };
 
-const isDuplicateWebhook = async (eventId: string, reference?: string | null) => {
-  await ensureWebhookEventTable();
-  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
-    SELECT id
-    FROM webhook_events
-    WHERE id = ${eventId}
-       OR (reference = ${reference} AND event_type = 'charge.success')
-    LIMIT 1
-  `;
-
-  return rows.length > 0;
-};
-
-const recordWebhookEvent = async (event: any) => {
-  await ensureWebhookEventTable();
+/**
+ * Store a processed webhook event for idempotency.
+ */
+const recordWebhookEvent = async (event: any): Promise<void> => {
   const eventId = String(
-    event?.id ||
-      `${event?.event || 'paystack'}:${event?.data?.reference || event?.data?.metadata?.bookingReference || Date.now()}`
+    event.id ||
+      `${event.event}:${event.data?.reference || event.data?.metadata?.bookingReference || Date.now()}`
   );
-  const reference = event?.data?.reference || event?.data?.metadata?.bookingReference || null;
+  const reference = event.data?.reference || event.data?.metadata?.bookingReference || null;
 
-  await prisma.$executeRaw`
-    INSERT INTO webhook_events (id, event_type, reference, payload, created_at)
-    VALUES (${eventId}, ${event?.event || 'unknown'}, ${reference}, ${JSON.stringify(event)}::jsonb, NOW())
-    ON CONFLICT (id) DO NOTHING
-  `;
+  await prisma.webhookEvent.create({
+    data: {
+      provider: 'paystack',
+      eventId,
+      eventType: event.event || 'unknown',
+      reference,
+      payload: event,
+    },
+  }).catch(() => {
+    // Unique constraint violation = duplicate, safe to ignore
+  });
 };
+
+// ─── Initialize Payment ───────────────────────────────────────────
 
 export const initializePayment = async (
   req: Request,
@@ -78,13 +79,33 @@ export const initializePayment = async (
       return;
     }
 
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    if (booking.status === BookingStatus.CANCELLED) {
+      res.status(400).json({
+        success: false,
+        message: 'This booking has been cancelled.',
+      });
+      return;
+    }
+
+    // Check if hold has expired
+    if (booking.holdExpiresAt && new Date(booking.holdExpiresAt) < new Date()) {
+      res.status(400).json({
+        success: false,
+        message: 'Your payment hold has expired. Please create a new booking.',
+      });
+      return;
+    }
+
+    const clientUrl = process.env.CLIENT_URL || BUSINESS_CONFIG.websiteUrl;
     const callbackUrl = `${clientUrl}/booking/confirmation/${booking.reference}`;
+
+    // Generate a unique reference per attempt
+    const paystackRef = generateUniqueReference(booking.reference);
 
     const paystackData = await initializePaystackTransaction({
       email: booking.guestEmail,
       amountInKobo: booking.totalAmount * 100,
-      reference: `PSTK_${booking.reference}_${Date.now()}`,
+      reference: paystackRef,
       callbackUrl,
       metadata: {
         bookingId: booking.id,
@@ -94,10 +115,12 @@ export const initializePayment = async (
       },
     });
 
+    // Update booking with the new Paystack reference and extend hold
     await prisma.booking.update({
       where: { id: booking.id },
       data: {
         paystackReference: paystackData.reference,
+        holdExpiresAt: new Date(Date.now() + BUSINESS_CONFIG.bookingHoldMinutes * 60 * 1000),
       },
     });
 
@@ -111,6 +134,8 @@ export const initializePayment = async (
     res.status(500).json({ success: false, message: 'Failed to initialize payment' });
   }
 };
+
+// ─── Verify Payment (callback page) ───────────────────────────────
 
 export const verifyPayment = async (
   req: Request,
@@ -148,12 +173,35 @@ export const verifyPayment = async (
     const verification = await verifyPaystackTransaction(reference);
 
     if (verification.status === 'success') {
+      // CRITICAL: Verify amount matches booking total (in kobo)
+      const expectedAmountKobo = booking.totalAmount * 100;
+      if (verification.amount !== expectedAmountKobo) {
+        console.error(`[Paystack] Amount mismatch: expected ${expectedAmountKobo}, got ${verification.amount}`);
+        res.status(400).json({
+          success: false,
+          message: 'Payment amount verification failed. The amount paid does not match the booking total.',
+        });
+        return;
+      }
+
+      // CRITICAL: Verify currency is NGN
+      if (verification.currency && verification.currency !== 'NGN') {
+        console.error(`[Paystack] Currency mismatch: expected NGN, got ${verification.currency}`);
+        res.status(400).json({
+          success: false,
+          message: 'Currency verification failed. Only NGN payments are accepted.',
+        });
+        return;
+      }
+
       const updated = await prisma.booking.update({
         where: { id: booking.id },
         data: {
           status: BookingStatus.CONFIRMED,
           paymentStatus: PaymentStatus.PAID,
+          paystackReference: verification.reference || reference,
           paystackPaidAt: new Date(verification.paid_at || Date.now()),
+          paystackChannel: verification.channel || null,
         },
         include: { apartment: true },
       });
@@ -176,6 +224,8 @@ export const verifyPayment = async (
     res.status(500).json({ success: false, message: 'Failed to verify payment' });
   }
 };
+
+// ─── Paystack Webhook ─────────────────────────────────────────────
 
 export const handlePaystackWebhook = async (
   req: Request,
@@ -203,42 +253,93 @@ export const handlePaystackWebhook = async (
     }
 
     const eventId = String(
-      event.id || `${event.event}:${event.data?.reference || event.data?.metadata?.bookingReference || Date.now()}`
+      event.id ||
+        `${event.event}:${event.data?.reference || event.data?.metadata?.bookingReference || Date.now()}`
     );
-    const bookingReference = event.data?.metadata?.bookingReference || event.data?.reference || null;
 
-    if (await isDuplicateWebhook(eventId, bookingReference)) {
+    // Idempotency check: has this event been processed before?
+    if (await isDuplicateWebhook(eventId)) {
       res.status(200).send('Webhook already processed');
       return;
     }
 
+    // Store the event for idempotency
     await recordWebhookEvent(event);
 
+    // Process charge.success
     if (event.event === 'charge.success') {
-      const { reference, metadata } = event.data;
-      const bookingRef = metadata?.bookingReference || bookingReference;
+      const { reference, metadata, amount, currency, channel, paid_at } = event.data;
+      const bookingRef = metadata?.bookingReference;
 
-      if (bookingRef) {
-        const booking = await prisma.booking.findUnique({
-          where: { reference: bookingRef },
-          include: { apartment: true },
-        });
-
-        if (booking && booking.status !== BookingStatus.CONFIRMED) {
-          const updated = await prisma.booking.update({
-            where: { id: booking.id },
-            data: {
-              status: BookingStatus.CONFIRMED,
-              paymentStatus: PaymentStatus.PAID,
-              paystackReference: reference,
-              paystackPaidAt: new Date(),
-            },
-            include: { apartment: true },
-          });
-
-          await sendBookingConfirmationEmail(updated);
-        }
+      if (!bookingRef) {
+        console.warn('[Paystack Webhook] No booking reference in metadata');
+        res.status(200).send('Webhook processed (no booking reference)');
+        return;
       }
+
+      const booking = await prisma.booking.findUnique({
+        where: { reference: bookingRef },
+        include: { apartment: true },
+      });
+
+      if (!booking) {
+        console.warn(`[Paystack Webhook] Booking not found: ${bookingRef}`);
+        res.status(200).send('Webhook processed (booking not found)');
+        return;
+      }
+
+      // Already confirmed — don't duplicate
+      if (booking.status === BookingStatus.CONFIRMED) {
+        res.status(200).send('Webhook processed (already confirmed)');
+        return;
+      }
+
+      // CRITICAL: Verify amount matches booking total (in kobo)
+      const expectedAmountKobo = booking.totalAmount * 100;
+      if (amount !== expectedAmountKobo) {
+        console.error(
+          `[Paystack Webhook] Amount mismatch for ${bookingRef}: expected ${expectedAmountKobo}, got ${amount}`
+        );
+        // Record the mismatch but don't confirm the booking
+        res.status(200).send('Webhook processed (amount mismatch — booking NOT confirmed)');
+        return;
+      }
+
+      // CRITICAL: Verify currency is NGN
+      if (currency && currency !== 'NGN') {
+        console.error(
+          `[Paystack Webhook] Currency mismatch for ${bookingRef}: expected NGN, got ${currency}`
+        );
+        res.status(200).send('Webhook processed (currency mismatch — booking NOT confirmed)');
+        return;
+      }
+
+      // All checks passed — confirm the booking
+      const updated = await prisma.booking.update({
+        where: { id: booking.id },
+        data: {
+          status: BookingStatus.CONFIRMED,
+          paymentStatus: PaymentStatus.PAID,
+          paystackReference: reference,
+          paystackPaidAt: new Date(paid_at || Date.now()),
+          paystackChannel: channel || null,
+        },
+        include: { apartment: true },
+      });
+
+      // Send confirmation email (non-fatal)
+      await sendBookingConfirmationEmail(updated).catch((err) =>
+        console.error('[Paystack Webhook] Confirmation email failed:', err)
+      );
+    }
+
+    // Handle failed and abandoned payments (non-fatal logging only)
+    if (event.event === 'charge.failed') {
+      console.warn(`[Paystack Webhook] Payment failed: ${event.data?.reference || 'unknown'}`);
+    }
+
+    if (event.event === 'payment.authorization.abandoned' || event.event === 'transfer.abandoned') {
+      console.warn(`[Paystack Webhook] Payment abandoned: ${event.data?.reference || 'unknown'}`);
     }
 
     res.status(200).send('Webhook processed');
