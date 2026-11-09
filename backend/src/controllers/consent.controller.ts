@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const acceptSchema = z.object({
   documentType: z.enum(['terms', 'privacy', 'refund', 'cookie']),
-  marketingOptIn: z.boolean().optional().default(false),
+  marketingOptIn: z.boolean().optional(),
 });
 
 /**
@@ -92,7 +92,17 @@ export const checkTermsStatus = async (req: Request, res: Response): Promise<voi
       select: { termsVersion: true, termsAcceptedAt: true },
     });
 
-    const needsReaccept = !user?.termsAcceptedAt || user.termsVersion !== BUSINESS_CONFIG.termsVersion;
+    const records = await prisma.consentRecord.findMany({
+      where: { userId: req.user.id, documentType: { in: ['terms', 'privacy', 'refund'] } },
+      select: { documentType: true, version: true },
+      orderBy: { acceptedAt: 'desc' },
+    });
+    const latest = new Map<string, string>();
+    for (const record of records) if (!latest.has(record.documentType)) latest.set(record.documentType, record.version);
+    const needsReaccept = !user?.termsAcceptedAt || user.termsVersion !== BUSINESS_CONFIG.termsVersion ||
+      latest.get('terms') !== BUSINESS_CONFIG.termsVersion ||
+      latest.get('privacy') !== BUSINESS_CONFIG.privacyVersion ||
+      latest.get('refund') !== BUSINESS_CONFIG.refundVersion;
 
     res.status(200).json({
       success: true,

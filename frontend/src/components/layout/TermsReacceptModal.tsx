@@ -18,6 +18,8 @@ export const TermsReacceptModal: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [statusError, setStatusError] = useState(false);
 
   useEffect(() => {
     if (isLoading || !user) return;
@@ -27,9 +29,13 @@ export const TermsReacceptModal: React.FC = () => {
         const res = await api.get('/consent/terms-status');
         if (res.data?.success && res.data?.data?.needsReaccept) {
           setNeedsReaccept(true);
+        } else if (!res.data?.success) {
+          setNeedsReaccept(true);
+          setStatusError(true);
         }
       } catch {
-        // Silently ignore — don't block users if the endpoint fails
+        setNeedsReaccept(true);
+        setStatusError(true);
       }
     };
 
@@ -49,6 +55,8 @@ export const TermsReacceptModal: React.FC = () => {
       ]);
 
       setNeedsReaccept(false);
+      setAccepted(false);
+      setStatusError(false);
     } catch (err: any) {
       setError(err.message || 'Failed to record consent. Please try again.');
     } finally {
@@ -69,8 +77,7 @@ export const TermsReacceptModal: React.FC = () => {
             We&apos;ve Updated Our Policies
           </h2>
           <p className="text-sm text-charcoal-700">
-            We&apos;ve updated our Terms, Privacy, and Refund Policy to better serve you.
-            Please review and accept the updated policies to continue.
+            Please review and accept our Terms, Privacy Policy, and Refund Policy before continuing.
           </p>
         </div>
 
@@ -85,6 +92,13 @@ export const TermsReacceptModal: React.FC = () => {
             → Refund Policy (v1.0)
           </Link>
         </div>
+
+        {statusError && <p role="alert" className="text-xs text-red-700">We could not verify your acceptance status. Accepting the documents below will retry and record your choices.</p>}
+
+        <label className="flex items-start gap-2 text-xs text-charcoal-700">
+          <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="mt-0.5 h-4 w-4" />
+          <span>I have read and accept the Terms, Privacy Policy, and Refund Policy.</span>
+        </label>
 
         <label className="flex items-start gap-2 text-xs text-charcoal-700">
           <input
@@ -105,7 +119,7 @@ export const TermsReacceptModal: React.FC = () => {
           size="lg"
           className="w-full"
           onClick={handleAccept}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !accepted}
           leftIcon={isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : undefined}
         >
           {isSubmitting ? 'Accepting...' : 'I Accept the Updated Policies'}

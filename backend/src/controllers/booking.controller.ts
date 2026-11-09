@@ -98,6 +98,11 @@ export const getBookingByReference = async (
       return;
     }
 
+    if (booking.userId !== req.user?.id && req.user?.role !== 'ADMIN') {
+      res.status(403).json({ success: false, message: 'You are not allowed to view this booking.' });
+      return;
+    }
+
     res.status(200).json({
       success: true,
       data: { booking },
@@ -198,6 +203,11 @@ export const completePayment = async (req: Request, res: Response): Promise<void
 
     if (!booking) {
       res.status(404).json({ success: false, message: 'Booking not found.' });
+      return;
+    }
+
+    if (booking.userId !== req.user?.id && req.user?.role !== 'ADMIN') {
+      res.status(403).json({ success: false, message: 'You are not allowed to pay for this booking.' });
       return;
     }
 

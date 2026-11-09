@@ -8,7 +8,7 @@ import {
   completePayment,
 } from '../controllers/booking.controller';
 import { validate } from '../middleware/validate';
-import { optionalAuth, authenticate } from '../middleware/auth';
+import { authenticate, requireCurrentConsent } from '../middleware/auth';
 import {
   calculateQuoteSchema,
   createBookingSchema,
@@ -17,10 +17,10 @@ import {
 const bookingRouter = Router();
 
 bookingRouter.post('/calculate-quote', validate(calculateQuoteSchema), calculateQuote);
-bookingRouter.post('/', optionalAuth, validate(createBookingSchema), createBooking);
+bookingRouter.post('/', authenticate, requireCurrentConsent, validate(createBookingSchema), createBooking);
 bookingRouter.get('/my-bookings', authenticate, getMyBookings);
-bookingRouter.get('/:reference', getBookingByReference);
-bookingRouter.post('/:id/cancel', authenticate, cancelBooking);
-bookingRouter.post('/:reference/complete-payment', completePayment);
+bookingRouter.get('/:reference', authenticate, getBookingByReference);
+bookingRouter.post('/:id/cancel', authenticate, requireCurrentConsent, cancelBooking);
+bookingRouter.post('/:reference/complete-payment', authenticate, requireCurrentConsent, completePayment);
 
 export default bookingRouter;

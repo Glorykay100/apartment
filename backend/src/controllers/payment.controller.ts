@@ -71,6 +71,11 @@ export const initializePayment = async (
       return;
     }
 
+    if (booking.userId !== req.user?.id && req.user?.role !== 'ADMIN') {
+      res.status(403).json({ success: false, message: 'You are not allowed to pay for this booking.' });
+      return;
+    }
+
     if (booking.status === BookingStatus.CONFIRMED) {
       res.status(400).json({
         success: false,
@@ -158,6 +163,11 @@ export const verifyPayment = async (
 
     if (!booking) {
       res.status(404).json({ success: false, message: 'Associated booking not found' });
+      return;
+    }
+
+    if (booking.userId !== req.user?.id && req.user?.role !== 'ADMIN') {
+      res.status(403).json({ success: false, message: 'You are not allowed to view this payment.' });
       return;
     }
 
