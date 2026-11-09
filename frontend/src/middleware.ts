@@ -36,13 +36,6 @@ const AUTH_ROUTES = [
 ];
 
 async function middleware(request: NextRequest) {
-  const { supabase, response } = createSupabaseMiddlewareClient(request);
-
-  // Refresh the session — this updates cookies if needed
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
   const pathname = request.nextUrl.pathname;
 
   // Check if the current route is protected
@@ -55,16 +48,33 @@ async function middleware(request: NextRequest) {
     (route) => pathname === route || pathname.startsWith(route + '/')
   );
 
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    if (isProtectedRoute) {
+      const loginUrl = new URL('/auth/login', request.url);
+      loginUrl.searchParams.set('redirect', `${pathname}${request.nextUrl.search}`);
+      return NextResponse.redirect(loginUrl);
+    }
+    return NextResponse.next();
+  }
+
+  const { supabase, response } = createSupabaseMiddlewareClient(request);
+  // Refresh and validate the cookie session on each matched request.
+  const { data: { user } } = await supabase.auth.getUser();
+
   // Redirect unauthenticated users trying to access protected routes
-  if (isProtectedRoute && !session) {
+  if (isProtectedRoute && !user) {
     const loginUrl = new URL('/auth/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    loginUrl.searchParams.set('redirect', `${pathname}${request.nextUrl.search}`);
+    const redirect = NextResponse.redirect(loginUrl);
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
   }
 
   // Redirect authenticated users away from auth pages
-  if (isAuthRoute && session) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  if (isAuthRoute && user) {
+    const redirect = NextResponse.redirect(new URL('/dashboard', request.url));
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
   }
 
   return response;

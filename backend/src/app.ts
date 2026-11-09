@@ -12,6 +12,8 @@ import newsletterRouter from './routes/newsletter.routes';
 import adminRouter from './routes/admin.routes';
 import reviewRouter from './routes/review.routes';
 import consentRouter from './routes/consent.routes';
+import { authenticate } from './middleware/auth';
+import { getMe } from './controllers/auth.controller';
 
 export const app = express();
 
@@ -49,6 +51,7 @@ app.get('/api/v1/health', (_req: Request, res: Response) => {
 
 // API Routes
 app.use('/api/v1/auth', authRouter);
+app.get('/api/v1/me', authenticate, getMe);
 app.use('/api/v1/apartments', apartmentRouter);
 app.use('/api/v1/contact', contactRouter);
 app.use('/api/v1/bookings', bookingRouter);

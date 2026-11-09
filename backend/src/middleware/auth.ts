@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Role } from '@prisma/client';
-import { verifyJwtToken, UserTokenPayload } from '../utils/jwt';
+import { UserTokenPayload } from '../utils/jwt';
+import { verifySupabaseToken } from '../config/supabaseAuth';
 
 // Extend Express Request interface
 declare global {
@@ -11,20 +12,34 @@ declare global {
   }
 }
 
-export const authenticate = (
+/**
+ * Extracts a bearer token from the request.
+ *
+ * Only a Supabase access token is accepted on protected routes.
+ */
+function extractToken(req: Request): string | undefined {
+  if (req.headers.authorization?.startsWith('Bearer ')) {
+    return req.headers.authorization.split(' ')[1];
+  }
+  return undefined;
+}
+
+/**
+ * Primary authentication middleware.
+ *
+ * Supabase verifies the token signature, expiry and audience. Application
+ * identity and role are then loaded from the existing PostgreSQL User row.
+ *
+ * Never trusts a user ID from the client — the Supabase token is verified
+ * server-side, and the role always comes from our own User table.
+ */
+export const authenticate = async (
   req: Request,
   res: Response,
   next: NextFunction
-): void => {
+): Promise<void> => {
   try {
-    let token: string | undefined;
-
-    // Check authorization header
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
-    } else if (req.cookies && req.cookies.token) {
-      token = req.cookies.token;
-    }
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({
@@ -34,8 +49,16 @@ export const authenticate = (
       return;
     }
 
-    const decoded = verifyJwtToken(token);
-    req.user = decoded;
+    const userPayload = await verifySupabaseToken(token);
+    if (!userPayload) {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid or expired session. Please log in again.',
+      });
+      return;
+    }
+    req.user = userPayload;
+
     next();
   } catch (error) {
     res.status(401).json({
@@ -60,25 +83,59 @@ export const requireAdmin = (
   next();
 };
 
-export const optionalAuth = (
+export const optionalAuth = async (
   req: Request,
   _res: Response,
   next: NextFunction
-): void => {
+): Promise<void> => {
   try {
-    let token: string | undefined;
+    const token = extractToken(req);
 
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
-    } else if (req.cookies && req.cookies.token) {
-      token = req.cookies.token;
+    if (!token) {
+      next();
+      return;
     }
 
-    if (token) {
-      req.user = verifyJwtToken(token);
-    }
+    const userPayload = await verifySupabaseToken(token);
+    if (userPayload) req.user = userPayload;
   } catch {
     // Ignore invalid token in optional auth
   }
   next();
+};
+
+/** Blocks booking/payment actions until all current legal documents are accepted. */
+export const requireCurrentConsent = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ success: false, message: 'Authentication required.' });
+    return;
+  }
+  try {
+    const { prisma } = await import('../config/db');
+    const { BUSINESS_CONFIG } = await import('../config/business');
+    const accepted = await prisma.consentRecord.findMany({
+      where: { userId: req.user.id, documentType: { in: ['terms', 'privacy', 'refund'] } },
+      select: { documentType: true, version: true },
+      orderBy: { acceptedAt: 'desc' },
+    });
+    const latest = new Map<string, string>();
+    for (const record of accepted) if (!latest.has(record.documentType)) latest.set(record.documentType, record.version);
+    const current: Record<string, string> = {
+      terms: BUSINESS_CONFIG.termsVersion,
+      privacy: BUSINESS_CONFIG.privacyVersion,
+      refund: BUSINESS_CONFIG.refundVersion,
+    };
+    const missing = Object.entries(current).some(([document, version]) => latest.get(document) !== version);
+    if (missing) {
+      res.status(428).json({ success: false, code: 'CONSENT_REQUIRED', message: 'Please accept the current Terms, Privacy Policy and Refund Policy before continuing.' });
+      return;
+    }
+    next();
+  } catch {
+    res.status(500).json({ success: false, message: 'Unable to verify legal consent.' });
+  }
 };

@@ -21,7 +21,8 @@ import { createSupabaseRouteClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
-  const next = requestUrl.searchParams.get('next') || '/dashboard';
+  const requestedNext = requestUrl.searchParams.get('next') || '/dashboard';
+  const next = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/dashboard';
   const error = requestUrl.searchParams.get('error');
   const errorDescription = requestUrl.searchParams.get('error_description');
 
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
   if (error) {
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('error', error);
+    loginUrl.searchParams.set('redirect', next);
     if (errorDescription) {
       loginUrl.searchParams.set('error_description', errorDescription);
     }
@@ -38,6 +40,7 @@ export async function GET(request: NextRequest) {
   if (!code) {
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('error', 'missing_code');
+    loginUrl.searchParams.set('redirect', next);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -49,6 +52,7 @@ export async function GET(request: NextRequest) {
   if (exchangeError) {
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('error', 'exchange_failed');
+    loginUrl.searchParams.set('redirect', next);
     return NextResponse.redirect(loginUrl);
   }
 

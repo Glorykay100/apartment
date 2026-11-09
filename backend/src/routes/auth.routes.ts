@@ -1,21 +1,11 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import {
-  register,
-  login,
   logout,
   getMe,
-  forgotPassword,
-  resetPassword,
+  supabaseLogin,
 } from '../controllers/auth.controller';
-import { validate } from '../middleware/validate';
 import { authenticate } from '../middleware/auth';
-import {
-  registerSchema,
-  loginSchema,
-  forgotPasswordSchema,
-  resetPasswordSchema,
-} from '../validations/auth.validation';
 
 const authRouter = Router();
 
@@ -31,21 +21,15 @@ const authLimiter = rateLimit({
   },
 });
 
-authRouter.post('/register', authLimiter, validate(registerSchema), register);
-authRouter.post('/login', authLimiter, validate(loginSchema), login);
+const legacyPasswordEndpoint = (_req: import('express').Request, res: import('express').Response) => {
+  res.status(410).json({ success: false, message: 'Password authentication is now managed by Supabase Auth.' });
+};
+authRouter.post('/register', authLimiter, legacyPasswordEndpoint);
+authRouter.post('/login', authLimiter, legacyPasswordEndpoint);
+authRouter.post('/supabase-login', authLimiter, supabaseLogin);
 authRouter.post('/logout', logout);
 authRouter.get('/me', authenticate, getMe);
-authRouter.post(
-  '/forgot-password',
-  authLimiter,
-  validate(forgotPasswordSchema),
-  forgotPassword
-);
-authRouter.post(
-  '/reset-password',
-  authLimiter,
-  validate(resetPasswordSchema),
-  resetPassword
-);
+authRouter.post('/forgot-password', authLimiter, legacyPasswordEndpoint);
+authRouter.post('/reset-password', authLimiter, legacyPasswordEndpoint);
 
 export default authRouter;

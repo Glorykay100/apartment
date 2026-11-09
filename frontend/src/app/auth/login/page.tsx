@@ -6,16 +6,26 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react';
+import { Lock, AlertCircle } from 'lucide-react';
+import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthError = params.get('error');
+    if (oauthError) setError(oauthError === 'auth_not_configured' ? 'Sign-in is not configured yet. Please try again later.' : oauthError === 'access_denied' ? 'Google sign-in was cancelled.' : 'Google sign-in could not be completed. Please try again.');
+    if (params.get('message') === 'check-email') setNotice('Check your inbox to verify your email, then return here to sign in.');
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +34,8 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push('/dashboard');
+      const target = new URLSearchParams(window.location.search).get('redirect') || '/dashboard';
+      router.push(target.startsWith('/') && !target.startsWith('//') ? target : '/dashboard');
     } catch (err: any) {
       setError(err.message || 'Invalid email or password credentials');
     } finally {
@@ -56,6 +67,24 @@ export default function LoginPage() {
             Access your reservations, receipts, and personal concierge.
           </p>
         </div>
+
+        <GoogleAuthButton
+          disabled={googleLoading}
+          onClick={async () => {
+            setGoogleLoading(true);
+            setError(null);
+            try {
+              const target = new URLSearchParams(window.location.search).get('redirect') || '/dashboard';
+              await loginWithGoogle(target);
+            } catch (err: any) {
+              setError(err.message || 'Google sign-in could not be started.');
+              setGoogleLoading(false);
+            }
+          }}
+        />
+        <div className="flex items-center gap-3 text-[10px] uppercase tracking-wider text-charcoal-700"><span className="h-px flex-1 bg-linen" />or sign in with email<span className="h-px flex-1 bg-linen" /></div>
+
+        {notice && <p role="status" className="rounded-xl bg-forest-50 p-3 text-xs text-forest-900">{notice}</p>}
 
         {error && (
           <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700">

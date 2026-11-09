@@ -1,15 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { AlertCircle, CheckCircle2, Lock } from 'lucide-react';
-import { api } from '@/lib/api';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get('token') || '';
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -19,11 +19,6 @@ export default function ResetPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!token) {
-      setError('Invalid reset link. Please request a new password reset.');
-      return;
-    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
@@ -39,7 +34,8 @@ export default function ResetPasswordPage() {
     setError(null);
 
     try {
-      await api.post('/auth/reset-password', { token, password });
+      const { error: updateError } = await createSupabaseBrowserClient().auth.updateUser({ password });
+      if (updateError) throw updateError;
       setSuccess(true);
       setTimeout(() => router.push('/auth/login'), 3000);
     } catch (err: any) {
@@ -116,5 +112,23 @@ export default function ResetPasswordPage() {
         </form>
       </div>
     </main>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-[85vh] flex items-center justify-center bg-sand-100 px-4 py-16">
+          <div className="w-full max-w-md rounded-3xl border border-linen bg-white p-8 sm:p-10 shadow-elevated space-y-6">
+            <Skeleton className="h-12 w-12 rounded-2xl mx-auto" />
+            <Skeleton className="h-8 w-48 mx-auto" />
+            <Skeleton className="h-64 w-full rounded-2xl" />
+          </div>
+        </main>
+      }
+    >
+      <ResetPasswordForm />
+    </Suspense>
   );
 }

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { ArrowLeft, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -19,7 +19,10 @@ export default function ForgotPasswordPage() {
     setError(null);
 
     try {
-      await api.post('/auth/forgot-password', { email });
+      const { error: resetError } = await createSupabaseBrowserClient().auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+      });
+      if (resetError) throw resetError;
       setSuccess('We have sent password reset instructions to your email address if an account matches this profile.');
       setEmail('');
     } catch (err: any) {

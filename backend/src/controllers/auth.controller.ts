@@ -5,6 +5,22 @@ import { prisma } from '../config/db';
 import { signJwtToken, setAuthCookie, clearAuthCookie } from '../utils/jwt';
 import { BUSINESS_CONFIG } from '../config/business';
 import { Role } from '@prisma/client';
+import { verifySupabaseToken } from '../config/supabaseAuth';
+
+const getConsentStatus = async (userId: string, user: { termsVersion: string | null; termsAcceptedAt: Date | null }) => {
+  const records = await prisma.consentRecord.findMany({
+    where: { userId, documentType: { in: ['terms', 'privacy', 'refund'] } },
+    select: { documentType: true, version: true },
+    orderBy: { acceptedAt: 'desc' },
+  });
+  const accepted = new Map<string, string>();
+  for (const record of records) if (!accepted.has(record.documentType)) accepted.set(record.documentType, record.version);
+  const needsReaccept = !user.termsAcceptedAt || user.termsVersion !== BUSINESS_CONFIG.termsVersion ||
+    accepted.get('terms') !== BUSINESS_CONFIG.termsVersion ||
+    accepted.get('privacy') !== BUSINESS_CONFIG.privacyVersion ||
+    accepted.get('refund') !== BUSINESS_CONFIG.refundVersion;
+  return { needsReaccept, currentVersion: BUSINESS_CONFIG.termsVersion, acceptedVersion: user.termsVersion, acceptedAt: user.termsAcceptedAt };
+};
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -167,6 +183,89 @@ export const logout = async (_req: Request, res: Response): Promise<void> => {
   });
 };
 
+/**
+ * Supabase login — accepts a Supabase access token from the frontend,
+ * verifies it, and returns the user profile from our database.
+ *
+ * This endpoint is called after the frontend gets a Supabase session
+ * (via Google OAuth or email/password sign-in). The backend verifies
+ * the token, finds or creates the User row, and returns the profile
+ * including role and consent status.
+ *
+ * The token is NOT stored on the backend — the frontend manages the
+ * Supabase session via cookies through @supabase/ssr.
+ */
+export const supabaseLogin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { accessToken } = req.body;
+
+    if (!accessToken) {
+      res.status(400).json({
+        success: false,
+        message: 'Access token is required.',
+      });
+      return;
+    }
+
+    // verifySupabaseToken verifies the JWT signature, expiry, audience
+    // and finds or creates the user in our database
+    const userPayload = await verifySupabaseToken(accessToken);
+
+    if (!userPayload) {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid or expired Supabase token. Please log in again.',
+      });
+      return;
+    }
+
+    // Fetch the full user profile from our database
+    const user = await prisma.user.findUnique({
+      where: { id: userPayload.id },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        phone: true,
+        role: true,
+        emailVerified: true,
+        supabaseUserId: true,
+        authProvider: true,
+        avatarUrl: true,
+        termsAcceptedAt: true,
+        termsVersion: true,
+        emailPreferences: { select: { marketingOptIn: true, optInAt: true, optOutAt: true } },
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'User profile not found after authentication.',
+      });
+      return;
+    }
+
+    const consent = await getConsentStatus(user.id, user);
+
+    res.status(200).json({
+      success: true,
+      message: 'Successfully authenticated via Supabase.',
+      data: {
+        user,
+        consent,
+      },
+    });
+  } catch (error) {
+    console.error('Supabase login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Authentication failed. Please try again.',
+    });
+  }
+};
+
 export const getMe = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.user) {
@@ -182,6 +281,13 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
         fullName: true,
         phone: true,
         role: true,
+        emailVerified: true,
+        supabaseUserId: true,
+        authProvider: true,
+        avatarUrl: true,
+        termsAcceptedAt: true,
+        termsVersion: true,
+        emailPreferences: { select: { marketingOptIn: true, optInAt: true, optOutAt: true } },
         createdAt: true,
         updatedAt: true,
       },
@@ -192,9 +298,15 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Include consent status so the frontend knows whether to show the terms modal
+    const consent = await getConsentStatus(user.id, user);
+
     res.status(200).json({
       success: true,
-      data: { user },
+      data: {
+        user,
+        consent,
+      },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch user profile.' });

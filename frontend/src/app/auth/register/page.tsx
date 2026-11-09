@@ -7,39 +7,36 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { UserCheck, AlertCircle } from 'lucide-react';
+import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [marketingConsent, setMarketingConsent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [emailPending, setEmailPending] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!termsAccepted) {
-      setError('You must agree to the Terms and Conditions and Privacy Policy before creating an account.');
-      return;
-    }
 
     setIsLoading(true);
     setError(null);
 
     try {
-      await register({
+      const needsVerification = await register({
         fullName,
         email,
         phone,
         password,
       });
-      router.push('/dashboard');
+      if (needsVerification) setEmailPending(true);
+      else router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please check your details.');
     } finally {
@@ -61,6 +58,25 @@ export default function RegisterPage() {
             Join Yahsab for seamless booking, stay history, and verified reviews.
           </p>
         </div>
+
+        <GoogleAuthButton
+          label="Sign up with Google"
+          disabled={googleLoading}
+          onClick={async () => {
+            setGoogleLoading(true);
+            setError(null);
+            try {
+              const target = new URLSearchParams(window.location.search).get('redirect') || '/dashboard';
+              await loginWithGoogle(target);
+            } catch (err: any) {
+              setError(err.message || 'Google sign-in could not be started.');
+              setGoogleLoading(false);
+            }
+          }}
+        />
+        <div className="flex items-center gap-3 text-[10px] uppercase tracking-wider text-charcoal-700"><span className="h-px flex-1 bg-linen" />or create an account with email<span className="h-px flex-1 bg-linen" /></div>
+
+        {emailPending && <div role="status" className="rounded-xl border border-forest-200 bg-forest-50 p-4 text-sm text-forest-900">We sent a verification link to <strong>{email}</strong>. Verify your email to finish creating your account.</div>}
 
         {error && (
           <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700">
@@ -109,36 +125,20 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-3 rounded-2xl border border-linen bg-sand-50 p-3 text-xs text-charcoal-700">
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={termsAccepted}
-                onChange={(e) => setTermsAccepted(e.target.checked)}
-                className="mt-0.5 h-4 w-4"
-                required
-              />
+            <div className="flex items-start gap-2">
               <span>
-                I agree to the{' '}
+                Before booking, you will be asked to accept the{' '}
                 <Link href="/terms" target="_blank" rel="noreferrer" className="font-semibold text-terracotta-600 underline underline-offset-2">
-                  Terms and Conditions
+                  Terms
                 </Link>{' '}
-                and{' '}
+                ,{' '}
                 <Link href="/privacy" target="_blank" rel="noreferrer" className="font-semibold text-terracotta-600 underline underline-offset-2">
                   Privacy Policy
                 </Link>
-                .
+                {' '}and Refund Policy.
               </span>
-            </label>
+            </div>
 
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={marketingConsent}
-                onChange={(e) => setMarketingConsent(e.target.checked)}
-                className="mt-0.5 h-4 w-4"
-              />
-              <span>Optional: I would like to receive Yahsab updates and special offers by email.</span>
-            </label>
           </div>
 
           <Button

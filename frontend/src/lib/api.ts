@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createBrowserClient } from '@supabase/ssr';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
@@ -11,10 +12,14 @@ export const api = axios.create({
   },
 });
 
-// Interceptor to inject client-side token if stored in localStorage
-api.interceptors.request.use((config) => {
+// Send the current Supabase access token; no application password/JWT is stored by Yahsab.
+api.interceptors.request.use(async (config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('yahsab_token');
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return config;
+    const { data: { session } } = await createBrowserClient(url, key).auth.getSession();
+    const token = session?.access_token;
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
