@@ -4,7 +4,7 @@
 |---|---|---|
 | PostgreSQL target | Preserved | `backend/prisma/schema.prisma` still reads the existing `DATABASE_URL`; Render does not define or create a database. |
 | Schema migration | Applied before this turn | Existing additive migration only adds nullable `authProvider`, `avatarUrl`, `supabaseUserId` and a unique nullable-ID index. `prisma migrate status` reports up to date. |
-| Current data counts | 178 users, 4 bookings, 0 receipts, 1 review | Read-only counts from the configured PostgreSQL database. Earlier migration notes recorded 178 users and 4 bookings intact; before counts for receipts/reviews were not recorded. |
+| Current data counts | 178 users, 4 bookings, 0 receipts, 1 review | Read-only counts from the configured PostgreSQL database matched at the start and end of this turn. The migration was already applied before this turn; pre-migration receipt/review counts were not recorded. |
 | Local backup | Created | `backups/yahsab-pre-supabase-auth-2026-11-09.dump`, 54,081 bytes. |
 | Frontend Supabase Auth | Implemented | SSR cookies, middleware and server layouts; Google/email UI; email verification, callback, reset and logout via Supabase. |
 | Backend token verification | Implemented | HS256 secret or RS256/ES256 JWKS verification with expiry, issuer and `authenticated` audience checks, followed by Supabase Auth `getUser`. |
