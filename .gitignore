@@ -44,3 +44,6 @@ Thumbs.db
 
 # Build artifacts
 *.tsbuildinfo
+
+# Database backups (local safety copies, never committed)
+backups/

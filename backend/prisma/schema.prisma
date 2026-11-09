@@ -46,6 +46,13 @@ model User {
   phone           String?
   role            Role           @default(GUEST)
   emailVerified   Boolean        @default(false)
+  /// Supabase Auth user UUID — links the Supabase access token to this User row.
+  /// Nullable so existing rows are unaffected; populated on first Supabase login.
+  supabaseUserId  String?        @unique
+  /// How the user authenticated: "google" | "email" | null (legacy users)
+  authProvider    String?
+  /// Google profile picture URL (or other OAuth avatar)
+  avatarUrl       String?
   /// Timestamp of the last accepted Terms version (null = must accept at next login)
   termsAcceptedAt   DateTime?
   termsVersion       String?
