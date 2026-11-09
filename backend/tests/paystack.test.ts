@@ -1,13 +1,28 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import crypto from 'crypto';
 import { app } from '../src/app';
 import { prisma } from '../src/config/db';
 
+const auth = vi.hoisted(() => ({ userId: '' }));
+vi.mock('../src/config/supabaseAuth', () => ({
+  verifySupabaseToken: vi.fn(async (token: string) => token === 'test-guest-token'
+    ? { id: auth.userId, email: 'guest@yahsab.com', role: 'GUEST', fullName: 'Terna Agbo' }
+    : null),
+}));
+
 describe('Paystack Hardening Tests', () => {
   let apartmentId: string;
 
   beforeAll(async () => {
+    const user = await prisma.user.findUnique({ where: { email: 'guest@yahsab.com' } });
+    if (!user) throw new Error('Missing seeded test guest');
+    auth.userId = user.id;
+    await prisma.consentRecord.createMany({ data: [
+      { userId: user.id, documentType: 'terms', version: '1.0' },
+      { userId: user.id, documentType: 'privacy', version: '1.0' },
+      { userId: user.id, documentType: 'refund', version: '1.0' },
+    ] });
     const apt = await prisma.apartment.findFirst({
       where: { isPublished: true },
     });
@@ -33,6 +48,7 @@ describe('Paystack Hardening Tests', () => {
   const createTestBooking = async (email: string, checkIn: string, checkOut: string) => {
     const res = await request(app)
       .post('/api/v1/bookings')
+      .set('Authorization', 'Bearer test-guest-token')
       .send({
         apartmentId,
         checkIn,
@@ -187,6 +203,7 @@ describe('Paystack Hardening Tests', () => {
     // Now a new booking for the same dates should succeed
     const newRes = await request(app)
       .post('/api/v1/bookings')
+      .set('Authorization', 'Bearer test-guest-token')
       .send({
         apartmentId,
         checkIn: '2027-04-10',
@@ -236,6 +253,7 @@ describe('Paystack Hardening Tests', () => {
 
     const init1 = await request(app)
       .post('/api/v1/payments/initialize')
+      .set('Authorization', 'Bearer test-guest-token')
       .send({ bookingReference: booking.reference });
 
     expect(init1.status).toBe(200);
@@ -244,6 +262,7 @@ describe('Paystack Hardening Tests', () => {
 
     const init2 = await request(app)
       .post('/api/v1/payments/initialize')
+      .set('Authorization', 'Bearer test-guest-token')
       .send({ bookingReference: booking.reference });
 
     expect(init2.status).toBe(200);

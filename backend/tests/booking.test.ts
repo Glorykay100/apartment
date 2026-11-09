@@ -1,12 +1,27 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/config/db';
+
+const auth = vi.hoisted(() => ({ userId: '' }));
+vi.mock('../src/config/supabaseAuth', () => ({
+  verifySupabaseToken: vi.fn(async (token: string) => token === 'test-guest-token'
+    ? { id: auth.userId, email: 'guest@yahsab.com', role: 'GUEST', fullName: 'Terna Agbo' }
+    : null),
+}));
 
 describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
   let apartmentId: string;
 
   beforeAll(async () => {
+    const user = await prisma.user.findUnique({ where: { email: 'guest@yahsab.com' } });
+    if (!user) throw new Error('Missing seeded test guest');
+    auth.userId = user.id;
+    await prisma.consentRecord.createMany({ data: [
+      { userId: user.id, documentType: 'terms', version: '1.0' },
+      { userId: user.id, documentType: 'privacy', version: '1.0' },
+      { userId: user.id, documentType: 'refund', version: '1.0' },
+    ] });
     const apt = await prisma.apartment.findFirst({
       where: { isPublished: true },
     });
@@ -67,6 +82,7 @@ describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
   it('should create an atomic booking reservation', async () => {
     const res = await request(app)
       .post('/api/v1/bookings')
+      .set('Authorization', 'Bearer test-guest-token')
       .send({
         apartmentId,
         checkIn: '2026-12-15',
@@ -88,6 +104,7 @@ describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
     // 1. Create original reservation: 2026-12-15 to 2026-12-18
     const firstRes = await request(app)
       .post('/api/v1/bookings')
+      .set('Authorization', 'Bearer test-guest-token')
       .send({
         apartmentId,
         checkIn: '2026-12-15',
@@ -102,6 +119,7 @@ describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
     // 2. Attempt overlapping reservation: 2026-12-16 to 2026-12-20
     const res = await request(app)
       .post('/api/v1/bookings')
+      .set('Authorization', 'Bearer test-guest-token')
       .send({
         apartmentId,
         checkIn: '2026-12-16',
@@ -121,6 +139,7 @@ describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
     // 1. Create a fresh booking
     const bookRes = await request(app)
       .post('/api/v1/bookings')
+      .set('Authorization', 'Bearer test-guest-token')
       .send({
         apartmentId,
         checkIn: '2026-12-25',
@@ -137,6 +156,7 @@ describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
     // 2. Initialize payment
     const initRes = await request(app)
       .post('/api/v1/payments/initialize')
+      .set('Authorization', 'Bearer test-guest-token')
       .send({ bookingReference: booking.reference });
 
     expect(initRes.status).toBe(200);
@@ -146,7 +166,7 @@ describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
     // 3. Verify payment
     const verifyRes = await request(app).get(
       `/api/v1/payments/verify/${booking.reference}`
-    );
+    ).set('Authorization', 'Bearer test-guest-token');
 
     expect(verifyRes.status).toBe(200);
     expect(verifyRes.body.success).toBe(true);
