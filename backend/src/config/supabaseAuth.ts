@@ -121,7 +121,7 @@ export async function verifySupabaseToken(
   const supabaseUserId = supabaseUser.id;
   const email = supabaseUser.email || '';
   const provider = supabaseUser.app_metadata?.provider || 'email';
-  const emailVerified = provider === 'google' || supabaseUser.email_confirmed_at != null;
+  const emailVerified = supabaseUser.email_confirmed_at != null;
   const fullName =
     supabaseUser.user_metadata?.full_name ||
     supabaseUser.user_metadata?.name ||

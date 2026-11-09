@@ -1,13 +1,13 @@
 # Yahsab Luxury Apartments & Suites
 
-A boutique short-let and apartment booking platform for Nigeria, built with a Next.js frontend, Express + Prisma backend, PostgreSQL database, JWT authentication, and Paystack test-mode payments.
+A boutique short-let and apartment booking platform for Nigeria, built with a Next.js frontend, Express + Prisma backend, the existing PostgreSQL database, Supabase Auth, and Paystack test-mode payments.
 
 ## Project overview
 
 - Frontend: Next.js 14 App Router, TypeScript, Tailwind CSS, Framer Motion
 - Backend: Node.js, Express, TypeScript, Prisma ORM
-- Database: PostgreSQL (local, Neon, or Supabase)
-- Auth: JWT in HTTP-only cookies, bcrypt password hashing
+- Database: existing PostgreSQL database configured by `DATABASE_URL` (unchanged; Supabase is not the application database)
+- Auth: Supabase Auth (Google and verified email/password) with cookie sessions; account roles and application records remain in PostgreSQL
 - Payments: Paystack test mode
 - Email: Nodemailer via SMTP
 - Storage: Cloudinary-ready image handling
@@ -42,11 +42,10 @@ apartment/
 Base URL: http://localhost:5000/api/v1
 
 ### Auth
-- POST /auth/register
-- POST /auth/login
-- POST /auth/logout
-- GET /auth/me
-- POST /auth/forgot-password
+- GET /me (Supabase bearer token; profile, role and consent status)
+- GET /auth/me (same profile response)
+- POST /auth/logout (legacy cookie cleanup; Supabase session is cleared in the frontend)
+- POST /auth/register and /auth/login return 410; use Supabase Auth from the frontend
 
 ### Apartments
 - GET /apartments
@@ -119,9 +118,10 @@ cp frontend/.env.example frontend/.env.local
 ```bash
 cd backend
 npm run prisma:generate
-npx prisma migrate dev --name init
-npm run prisma:seed
+npx prisma migrate status
 ```
+
+Keep the existing `DATABASE_URL` unchanged. Do not seed an existing database: the seed script deletes application records. For reviewed, additive production schema changes, take a backup and use `npx prisma migrate deploy`.
 
 ### 4) Run the apps
 
@@ -176,21 +176,17 @@ npm run start
    - NEXT_PUBLIC_SITE_URL
 5. Enable automatic deploys from main and preview deploys from pull requests.
 
-### Backend on Render or Railway
-1. Create a new web service from the backend folder.
-2. Use the provided Dockerfile or the Node start command.
-3. Add environment variables for the database, JWT secret, Paystack key, email credentials, and CORS domain.
-4. Run database migrations during deployment:
-   ```bash
-   npx prisma migrate deploy
-   npm run prisma:seed
-   ```
-5. Configure CORS to allow the frontend domain.
+### Frontend and backend on Render
+1. Create services from the root `render.yaml` Blueprint, or create one Node web service from `backend/` and one from `frontend/`.
+2. Set frontend `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL`, and `NEXT_PUBLIC_SITE_URL`.
+3. Set backend `DATABASE_URL` to the current database URL without changing it; also set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, Brevo SMTP credentials, Paystack keys, and `CLIENT_URL`.
+4. Run `npx prisma migrate deploy` from the backend service only when a reviewed migration is pending. Never run `prisma migrate reset`, `db push --force-reset`, or the seed script against the existing database.
+5. Configure CORS to allow the live frontend domain.
 
-### Database on Neon or Supabase
-1. Create a PostgreSQL database on Neon or Supabase.
-2. Copy the connection string into DATABASE_URL.
-3. Run Prisma migrations and seed the database.
+### Existing PostgreSQL database
+Keep the current PostgreSQL host and `DATABASE_URL`. Supabase is used only for Auth; application queries, bookings, receipts, reviews, email preferences and roles remain in this database.
+
+See [Supabase Auth setup and release checklist](docs/SUPABASE_AUTH.md) for provider setup, SMTP, consent, account linking, Render settings and live verification steps.
 
 ### Paystack webhook setup
 - Set the webhook URL to:
@@ -209,12 +205,17 @@ npm run start
 - JWT_SECRET
 - JWT_EXPIRES_IN
 - COOKIE_SECRET
+- SUPABASE_URL
+- SUPABASE_ANON_KEY
+- SUPABASE_SERVICE_ROLE_KEY
+- SUPABASE_JWKS_URL (or SUPABASE_JWT_SECRET for legacy HS256 signing)
 - PAYSTACK_SECRET_KEY
 - PAYSTACK_PUBLIC_KEY
-- SMTP_HOST
-- SMTP_PORT
-- SMTP_USER
-- SMTP_PASS
+- BREVO_SMTP_HOST
+- BREVO_SMTP_PORT
+- BREVO_SMTP_USER
+- BREVO_SMTP_PASSWORD
+- BREVO_FROM
 - EMAIL_FROM
 - ADMIN_EMAIL
 - CLOUDINARY_CLOUD_NAME
@@ -225,10 +226,18 @@ npm run start
 - NEXT_PUBLIC_API_URL
 - NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY
 - NEXT_PUBLIC_SITE_URL
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 ## Branching and release workflow
 
 This project follows the branch structure in [CONTRIBUTING.md](CONTRIBUTING.md):
+
+The Supabase Auth rollout branches are ordered as follows:
+
+```text
+feature/supabase-auth-setup → feature/google-auth → feature/auth-consent-and-linking → feature/link-existing-users
+```
 
 ```bash
 git checkout develop
@@ -263,7 +272,8 @@ git log --oneline --graph --all
 ## Testing checklist
 
 - Health route returns 200
-- Auth register/login/logout works
+- Supabase Google and verified email/password sign-in work; logout clears the Supabase cookie session
+- Forged/expired tokens, cross-user booking access, non-admin admin access, and pre-consent booking/payment requests are rejected
 - Booking quote validation rejects invalid date ranges
 - Overlapping bookings are blocked
 - Paystack initialization and verification succeed in test mode

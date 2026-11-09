@@ -64,18 +64,20 @@ const sendTransactionalEmail = async ({
 
 /** Create a durable one-time claim before sending a welcome message. */
 export const sendWelcomeEmailOnce = async (user: { id: string; email: string; fullName: string }) => {
-  const claimed = await prisma.$transaction(async (tx) => {
+  const claimId = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))`;
     const prior = await tx.emailLog.findFirst({ where: { userId: user.id, type: 'welcome' } });
-    if (prior) return false;
-    await tx.emailLog.create({
+    if (prior && prior.status !== 'FAILED') return null;
+    if (prior) {
+      await tx.emailLog.update({ where: { id: prior.id }, data: { status: 'QUEUED', error: null, attempts: { increment: 1 } } });
+      return prior.id;
+    }
+    const created = await tx.emailLog.create({
       data: { userId: user.id, toEmail: user.email, type: 'welcome', subject: 'Welcome to Yahsab', status: 'QUEUED' },
     });
-    return true;
+    return created.id;
   });
-  if (!claimed) return;
-  const log = await prisma.emailLog.findFirst({ where: { userId: user.id, type: 'welcome' }, orderBy: { createdAt: 'desc' } });
-  if (!log) return;
+  if (!claimId) return;
   try {
     await sendTransactionalEmail({
       to: user.email,
@@ -83,24 +85,26 @@ export const sendWelcomeEmailOnce = async (user: { id: string; email: string; fu
       text: `Welcome to Yahsab, ${user.fullName}. Your account is ready for bookings, receipts and stay history.`,
       html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:32px;background:#FBF9F5;color:#132B22"><h2>Welcome to Yahsab</h2><p>Hello ${user.fullName.replace(/[&<>"']/g, '')},</p><p>Your account is ready for bookings, receipts and stay history.</p><p>We look forward to welcoming you.</p></div>`,
     });
-    await prisma.emailLog.update({ where: { id: log.id }, data: { status: 'SENT', sentAt: new Date() } });
+    await prisma.emailLog.update({ where: { id: claimId }, data: { status: 'SENT', sentAt: new Date() } });
   } catch (error) {
-    await prisma.emailLog.update({ where: { id: log.id }, data: { status: 'FAILED', error: error instanceof Error ? error.message : 'Send failed' } });
+    await prisma.emailLog.update({ where: { id: claimId }, data: { status: 'FAILED', error: error instanceof Error ? error.message : 'Send failed' } });
     console.error('Welcome email failed:', error);
   }
 };
 
 export const sendPasswordSetupEmailOnce = async (user: { id: string; email: string; fullName: string }, actionLink: string) => {
-  const claimed = await prisma.$transaction(async (tx) => {
+  const claimId = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id + ':password_setup'}))`;
     const prior = await tx.emailLog.findFirst({ where: { userId: user.id, type: 'password_setup' } });
-    if (prior) return false;
-    await tx.emailLog.create({ data: { userId: user.id, toEmail: user.email, type: 'password_setup', subject: 'Set your Yahsab password', status: 'QUEUED' } });
-    return true;
+    if (prior && prior.status !== 'FAILED') return null;
+    if (prior) {
+      await tx.emailLog.update({ where: { id: prior.id }, data: { status: 'QUEUED', error: null, attempts: { increment: 1 } } });
+      return prior.id;
+    }
+    const created = await tx.emailLog.create({ data: { userId: user.id, toEmail: user.email, type: 'password_setup', subject: 'Set your Yahsab password', status: 'QUEUED' } });
+    return created.id;
   });
-  if (!claimed) return 'already_sent' as const;
-  const log = await prisma.emailLog.findFirst({ where: { userId: user.id, type: 'password_setup' }, orderBy: { createdAt: 'desc' } });
-  if (!log) return 'failed' as const;
+  if (!claimId) return 'already_sent' as const;
   try {
     const delivery = await sendTransactionalEmail({
       to: user.email,
@@ -108,10 +112,10 @@ export const sendPasswordSetupEmailOnce = async (user: { id: string; email: stri
       text: `Hello ${user.fullName}. Set your password or continue with Google: ${actionLink}`,
       html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:32px;background:#FBF9F5;color:#132B22"><h2>Welcome to Yahsab</h2><p>Hello ${user.fullName.replace(/[&<>"']/g, '')},</p><p>Set your password or continue with Google.</p><p><a href="${actionLink}" style="display:inline-block;padding:12px 18px;background:#132B22;color:#fff;text-decoration:none;border-radius:8px">Set your password</a></p><p>If you prefer, you can continue with Google from the sign-in page.</p></div>`,
     });
-    await prisma.emailLog.update({ where: { id: log.id }, data: { status: 'SENT', sentAt: new Date() } });
+    await prisma.emailLog.update({ where: { id: claimId }, data: { status: 'SENT', sentAt: new Date() } });
     return delivery;
   } catch (error) {
-    await prisma.emailLog.update({ where: { id: log.id }, data: { status: 'FAILED', error: error instanceof Error ? error.message : 'Send failed' } });
+    await prisma.emailLog.update({ where: { id: claimId }, data: { status: 'FAILED', error: error instanceof Error ? error.message : 'Send failed' } });
     throw error;
   }
 };

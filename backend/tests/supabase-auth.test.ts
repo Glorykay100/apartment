@@ -78,7 +78,7 @@ describe('Supabase authentication and authorization', () => {
   });
 
   it('creates a guest profile idempotently with marketing opt-in disabled', async () => {
-    const created = { id: 'new-user', email: 'new@example.com', fullName: 'New Guest', role: 'GUEST', avatarUrl: null };
+    const created = { id: 'new-user', email: 'new@example.com', fullName: 'New Guest', role: 'GUEST', avatarUrl: null, emailVerified: true, authProvider: 'google' };
     mocks.userFindUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(created);
     mocks.userFindFirst.mockResolvedValue(null);
     mocks.userCreate.mockResolvedValue(created);

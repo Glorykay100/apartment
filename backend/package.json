@@ -11,6 +11,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
+    "auth:link-existing-users": "tsx scripts/link-existing-users-to-supabase.ts",
     "test": "vitest run"
   },
   "dependencies": {
