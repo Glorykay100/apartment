@@ -15,7 +15,7 @@ This report records commands run in this QA session. Passing a narrow test is no
 | Frontend/backend Playwright | NOT RUN | No Playwright dependency, test suite, browser report, or screenshots were available. `npm run test:e2e` is wired at the root but the frontend script is absent. |
 | Lighthouse, axe, link/console checks | NOT RUN | No browser run was completed. |
 | npm audit, backend | FAIL / findings returned | `npm audit --prefix backend --audit-level=high` reported **10 vulnerabilities: 3 high and 2 critical**, plus 3 moderate and 2 low. Findings include Nodemailer and Vitest dependency chains. npm proposed breaking upgrades for some findings; no automatic upgrades were applied. |
-| npm audit, frontend | NOT ESTABLISHED | Registry access did not return a completed result. Root package has no lockfile; frontend has its own lockfile. |
+| npm audit, frontend | FINDINGS | `npm audit --prefix frontend --audit-level=high` reported **5 vulnerabilities: 2 high and 1 critical**, plus 2 low. Findings include Next.js, PostCSS, Supabase Auth, and Zod. npm proposed a breaking Next.js major upgrade for all fixes; no automatic upgrades were applied. |
 | Secret scan | No matches found in checked scope | Searched the working tree for common live-key/private-key patterns and tracked Git history paths for env/secret/credential/key filenames. This is a pattern scan, not a claim of exhaustive secret detection. |
 | Live-site checks | NOT RUN | No live frontend/backend URLs or approved staging credentials were provided. |
 | Brevo real-send check | NOT RUN | No real message was sent. Tests use simulated email output; no real inbox was identified or authorized for a send. |
