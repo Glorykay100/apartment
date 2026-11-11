@@ -82,20 +82,16 @@ function CheckoutContent() {
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
+  const [guestFieldOverrides, setGuestFieldOverrides] = useState({ fullName: false, email: false, phone: false });
   const [specialRequests, setSpecialRequests] = useState('');
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
   const [acceptsRefundPolicy, setAcceptsRefundPolicy] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Auto-populate from logged-in user
-  useEffect(() => {
-    if (user) {
-      if (!fullName) setFullName(user.fullName);
-      if (!email) setEmail(user.email);
-      if (!phone && user.phone) setPhone(user.phone);
-    }
-  }, [user]);
+  const guestFullName = guestFieldOverrides.fullName ? fullName : user?.fullName || fullName;
+  const guestEmail = guestFieldOverrides.email ? email : user?.email || email;
+  const guestPhone = guestFieldOverrides.phone ? phone : user?.phone || phone;
 
   // Fetch verified server quote
   useEffect(() => {
@@ -161,9 +157,9 @@ function CheckoutContent() {
         checkIn,
         checkOut,
         guestCount: Number(guests),
-        guestFullName: fullName,
-        guestEmail: email,
-        guestPhone: phone,
+        guestFullName,
+        guestEmail,
+        guestPhone,
         specialRequests,
         addOnsTotal,
         acceptsNonRefundPolicy: acceptsRefundPolicy,
@@ -272,8 +268,11 @@ function CheckoutContent() {
                 label="Full Name (as on Government ID)"
                 required
                 placeholder="e.g. David Iorfa"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                value={guestFullName}
+                onChange={(e) => {
+                  setGuestFieldOverrides((current) => ({ ...current, fullName: true }));
+                  setFullName(e.target.value);
+                }}
               />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -282,16 +281,22 @@ function CheckoutContent() {
                   type="email"
                   required
                   placeholder="e.g. david@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={guestEmail}
+                  onChange={(e) => {
+                    setGuestFieldOverrides((current) => ({ ...current, email: true }));
+                    setEmail(e.target.value);
+                  }}
                 />
 
                 <Input
                   label="Phone / WhatsApp Number"
                   required
                   placeholder="e.g. +2348031234567"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  value={guestPhone}
+                  onChange={(e) => {
+                    setGuestFieldOverrides((current) => ({ ...current, phone: true }));
+                    setPhone(e.target.value);
+                  }}
                 />
               </div>
 

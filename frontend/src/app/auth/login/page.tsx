@@ -1,35 +1,42 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Lock, AlertCircle } from 'lucide-react';
 import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, loginWithGoogle } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dismissedOAuthError, setDismissedOAuthError] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const oauthError = params.get('error');
-    if (oauthError) setError(oauthError === 'auth_not_configured' ? 'Sign-in is not configured yet. Please try again later.' : oauthError === 'access_denied' ? 'Google sign-in was cancelled.' : 'Google sign-in could not be completed. Please try again.');
-    if (params.get('message') === 'check-email') setNotice('Check your inbox to verify your email, then return here to sign in.');
-  }, []);
+  const oauthError = searchParams.get('error');
+  const oauthErrorMessage = oauthError
+    ? oauthError === 'auth_not_configured'
+      ? 'Sign-in is not configured yet. Please try again later.'
+      : oauthError === 'access_denied'
+        ? 'Google sign-in was cancelled.'
+        : 'Google sign-in could not be completed. Please try again.'
+    : null;
+  const displayedError = error || (dismissedOAuthError ? null : oauthErrorMessage);
+  const notice = searchParams.get('message') === 'check-email'
+    ? 'Check your inbox to verify your email, then return here to sign in.'
+    : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setDismissedOAuthError(true);
     setError(null);
 
     try {
@@ -72,6 +79,7 @@ export default function LoginPage() {
           disabled={googleLoading}
           onClick={async () => {
             setGoogleLoading(true);
+            setDismissedOAuthError(true);
             setError(null);
             try {
               const target = new URLSearchParams(window.location.search).get('redirect') || '/dashboard';
@@ -86,10 +94,10 @@ export default function LoginPage() {
 
         {notice && <p role="status" className="rounded-xl bg-forest-50 p-3 text-xs text-forest-900">{notice}</p>}
 
-        {error && (
+        {displayedError && (
           <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{error}</span>
+            <span>{displayedError}</span>
           </div>
         )}
 
@@ -171,5 +179,13 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="min-h-[80vh] bg-sand-100" />}>
+      <LoginContent />
+    </Suspense>
   );
 }

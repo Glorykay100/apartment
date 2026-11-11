@@ -12,10 +12,13 @@ import newsletterRouter from './routes/newsletter.routes';
 import adminRouter from './routes/admin.routes';
 import reviewRouter from './routes/review.routes';
 import consentRouter from './routes/consent.routes';
+import jobsRouter from './routes/jobs.routes';
 import { authenticate } from './middleware/auth';
 import { getMe } from './controllers/auth.controller';
 
 export const app = express();
+// Vercel detects this default export and serves the Express app as a Function.
+export default app;
 
 // Security middleware
 app.use(helmet());
@@ -60,6 +63,7 @@ app.use('/api/v1/newsletter', newsletterRouter);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1/reviews', reviewRouter);
 app.use('/api/v1/consent', consentRouter);
+app.use('/api/v1/jobs', jobsRouter);
 
 // 404 Route Handler
 app.use((_req: Request, res: Response) => {
@@ -73,9 +77,18 @@ app.use((_req: Request, res: Response) => {
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('[Unhandled Error]:', err);
   const status = (err as any).statusCode || 500;
+  const isJsonParseError =
+    status === 400 &&
+    ((err as any).type === 'entity.parse.failed' || /Unexpected|Unterminated|JSON/.test(err.message || ''));
+
   res.status(status).json({
     success: false,
-    message: err.message || 'Internal Server Error',
+    message:
+      process.env.NODE_ENV === 'development'
+        ? err.message || 'Internal Server Error'
+        : isJsonParseError
+          ? 'Invalid JSON payload.'
+          : 'Internal Server Error',
     ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {}),
   });
 });

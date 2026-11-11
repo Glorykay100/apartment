@@ -7,6 +7,8 @@ import {
   generateUniqueReference,
 } from '../services/paystack.service';
 import { sendBookingConfirmationEmail } from '../services/email.service';
+import { ensureReceipt } from '../services/receipt.service';
+import { renderReceiptPdf } from '../utils/receiptPdf';
 import { BookingStatus, PaymentStatus } from '@prisma/client';
 import { BUSINESS_CONFIG } from '../config/business';
 
@@ -356,5 +358,51 @@ export const handlePaystackWebhook = async (
   } catch (error) {
     console.error('Webhook error:', error);
     res.status(500).send('Webhook processing error');
+  }
+};
+
+// ─── Receipt PDF Download ─────────────────────────────────────────
+
+/**
+ * GET /api/v1/payments/receipt/:reference — downloadable PDF receipt.
+ * Owner or admin only; booking must be paid.
+ */
+export const downloadReceipt = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { reference } = req.params;
+
+    const booking = await prisma.booking.findFirst({
+      where: { OR: [{ reference }, { paystackReference: reference }] },
+      include: { apartment: true, receipt: true },
+    });
+
+    if (!booking) {
+      res.status(404).json({ success: false, message: 'Booking not found' });
+      return;
+    }
+
+    if (booking.userId !== req.user?.id && req.user?.role !== 'ADMIN') {
+      res.status(403).json({ success: false, message: 'You are not allowed to download this receipt.' });
+      return;
+    }
+
+    if (booking.paymentStatus !== PaymentStatus.PAID || !booking.receipt) {
+      res.status(400).json({ success: false, message: 'No receipt is available for this booking yet.' });
+      return;
+    }
+
+    const pdf = renderReceiptPdf(booking.receipt, booking.reference);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${booking.receipt.receiptNumber}.pdf"`
+    );
+    res.status(200).send(pdf);
+  } catch (error) {
+    console.error('Receipt download error:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate receipt PDF' });
   }
 };

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Apartment } from '@/types';
 import { api } from '@/lib/api';
@@ -176,8 +176,7 @@ function ApartmentsCatalog() {
     sort: 'newest',
   });
 
-  const fetchApartments = async () => {
-    setIsLoading(true);
+  const fetchApartments = useCallback(async () => {
     try {
       const query = new URLSearchParams();
       if (filters.city && filters.city !== 'all') query.set('city', filters.city);
@@ -218,13 +217,15 @@ function ApartmentsCatalog() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filters]);
 
   useEffect(() => {
-    fetchApartments();
-  }, [filters.city, filters.bedrooms, filters.maxPrice, filters.sort, filters.search]);
+    const frame = requestAnimationFrame(() => { void fetchApartments(); });
+    return () => cancelAnimationFrame(frame);
+  }, [fetchApartments]);
 
   const handleReset = () => {
+    setIsLoading(true);
     setFilters({
       search: '',
       city: 'all',
@@ -252,7 +253,10 @@ function ApartmentsCatalog() {
       {/* Filter Bar */}
       <ApartmentFilters
         filters={filters}
-        onChange={setFilters}
+        onChange={(next) => {
+          setIsLoading(true);
+          setFilters(next);
+        }}
         onReset={handleReset}
         totalResults={totalCount}
       />

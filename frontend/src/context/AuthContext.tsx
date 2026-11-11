@@ -26,7 +26,9 @@ const getSupabase = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(
+    () => Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  );
 
   const refreshUser = async () => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -52,15 +54,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      setIsLoading(false);
       return;
     }
-    void refreshUser();
+    const initialRefresh = setTimeout(() => { void refreshUser(); }, 0);
     const { data: { subscription } } = getSupabase().auth.onAuthStateChange(() => {
       // Supabase recommends deferring API work outside its auth callback.
       setTimeout(() => { void refreshUser(); }, 0);
     });
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(initialRefresh);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {

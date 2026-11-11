@@ -31,9 +31,12 @@ describe('Paystack Hardening Tests', () => {
   });
 
   beforeEach(async () => {
-    // Clean up test bookings and webhook events
+    // Clean up test bookings and webhook events (receipts first: FK)
     await prisma.webhookEvent.deleteMany({
       where: { provider: 'paystack' },
+    });
+    await prisma.receipt.deleteMany({
+      where: { booking: { guestEmail: { contains: 'paystack-test' } } },
     });
     await prisma.booking.deleteMany({
       where: {

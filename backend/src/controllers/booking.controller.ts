@@ -8,6 +8,7 @@ import {
 } from '../services/booking.service';
 import { BookingStatus, PaymentStatus } from '@prisma/client';
 import { BUSINESS_CONFIG } from '../config/business';
+import { sendBookingReceivedEmailOnce } from '../services/email.service';
 
 export const calculateQuote = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -52,6 +53,18 @@ export const createBooking = async (req: Request, res: Response): Promise<void> 
       ...req.body,
       userId: req.user?.id,
     });
+
+    // "Booking received" email — sent at most once, only while unpaid.
+    // Non-fatal: a Brevo outage must not break booking creation.
+    try {
+      const withApartment = await prisma.booking.findUnique({
+        where: { id: booking.id },
+        include: { apartment: true },
+      });
+      if (withApartment) await sendBookingReceivedEmailOnce(withApartment);
+    } catch (emailError) {
+      console.error('Booking received email error (non-fatal):', emailError);
+    }
 
     res.status(201).json({
       success: true,

@@ -9,6 +9,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 24.22.2
       - key: PORT
         value: 10000
       - key: DATABASE_URL
@@ -47,6 +49,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 24.22.2
       - key: PORT
         value: 10000
       - key: NEXT_PUBLIC_API_URL

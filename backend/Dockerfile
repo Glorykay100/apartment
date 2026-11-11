@@ -1,5 +1,5 @@
 # Production Multi-Stage Dockerfile for Yahsab Backend
-FROM node:18-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY src ./src/
 RUN npm run build
 
 # Production Runtime
-FROM node:18-alpine AS runner
+FROM node:24-alpine AS runner
 
 WORKDIR /app
 

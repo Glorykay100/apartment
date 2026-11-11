@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Apartment } from '@/types';
 import { api } from '@/lib/api';
@@ -35,7 +35,6 @@ export const BookingSidebar: React.FC<BookingSidebarProps> = ({ apartment }) => 
   const [checkOut, setCheckOut] = useState<string>(formatDateISO(defaultCheckOut));
   const [guestCount, setGuestCount] = useState<number>(1);
   const [unavailableDates, setUnavailableDates] = useState<string[]>([]);
-  const [conflictError, setConflictError] = useState<string | null>(null);
 
   // Fetch unavailable dates
   useEffect(() => {
@@ -52,17 +51,14 @@ export const BookingSidebar: React.FC<BookingSidebarProps> = ({ apartment }) => 
     fetchAvailability();
   }, [apartment.id]);
 
-  // Validate dates whenever they change
-  useEffect(() => {
-    setConflictError(null);
-    if (!checkIn || !checkOut) return;
+  const conflictError = useMemo(() => {
+    if (!checkIn || !checkOut) return null;
 
     const start = new Date(checkIn);
     const end = new Date(checkOut);
 
     if (end <= start) {
-      setConflictError('Check-out date must be after check-in date.');
-      return;
+      return 'Check-out date must be after check-in date.';
     }
 
     // Check if any date in the selected range is unavailable
@@ -70,16 +66,14 @@ export const BookingSidebar: React.FC<BookingSidebarProps> = ({ apartment }) => 
     while (curr < end) {
       const dateStr = curr.toISOString().split('T')[0];
       if (unavailableDates.includes(dateStr)) {
-        setConflictError(
-          `The date ${curr.toLocaleDateString('en-GB', {
+        return `The date ${curr.toLocaleDateString('en-GB', {
             day: 'numeric',
             month: 'short',
-          })} is already booked or reserved.`
-        );
-        return;
+          })} is already booked or reserved.`;
       }
       curr.setDate(curr.getDate() + 1);
     }
+    return null;
   }, [checkIn, checkOut, unavailableDates]);
 
   // Calculate pricing breakdown

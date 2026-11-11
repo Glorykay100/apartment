@@ -31,7 +31,16 @@ describe('Booking Engine & Collision Prevention API (/api/v1/bookings)', () => {
 
   beforeEach(async () => {
     // Clean only this file's test bookings (vitest runs test files in
-    // parallel, so a broad deleteMany would race with other test files)
+    // parallel, so a broad deleteMany would race with other test files).
+    // Receipts reference bookings, so they must be removed first.
+    await prisma.receipt.deleteMany({
+      where: { booking: { apartmentId, OR: [
+        { guestEmail: { startsWith: 'emeka.' } },
+        { guestEmail: { startsWith: 'original.' } },
+        { guestEmail: { startsWith: 'conflict.' } },
+        { guestEmail: { startsWith: 'paystack.' } },
+      ] } },
+    });
     await prisma.booking.deleteMany({
       where: {
         apartmentId,

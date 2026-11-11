@@ -2,15 +2,15 @@ import { z } from 'zod';
 
 export const registerSchema = z.object({
   fullName: z
-    .string({ required_error: 'Full name is required' })
+    .string({ error: 'Full name is required' })
     .min(2, 'Full name must be at least 2 characters')
     .max(100, 'Full name cannot exceed 100 characters'),
   email: z
-    .string({ required_error: 'Email address is required' })
+    .string({ error: 'Email address is required' })
     .email('Please enter a valid email address')
     .toLowerCase(),
   password: z
-    .string({ required_error: 'Password is required' })
+    .string({ error: 'Password is required' })
     .min(8, 'Password must be at least 8 characters')
     .max(100, 'Password is too long')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
@@ -27,10 +27,10 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   email: z
-    .string({ required_error: 'Email is required' })
+    .string({ error: 'Email is required' })
     .email('Please provide a valid email')
     .toLowerCase(),
-  password: z.string({ required_error: 'Password is required' }),
+  password: z.string({ error: 'Password is required' }),
 });
 
 export const forgotPasswordSchema = z.object({

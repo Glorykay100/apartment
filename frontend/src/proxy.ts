@@ -35,7 +35,7 @@ const AUTH_ROUTES = [
   '/auth/register',
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Check if the current route is protected

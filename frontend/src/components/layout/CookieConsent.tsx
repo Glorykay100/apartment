@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 
@@ -39,41 +39,54 @@ export const readConsent = (): ConsentPrefs | null => {
   }
 };
 
+const readConsentCookie = () => {
+  if (typeof document === 'undefined') return null;
+  return document.cookie
+    .split('; ')
+    .find((entry) => entry.startsWith(`${COOKIE_NAME}=`))
+    ?.slice(COOKIE_NAME.length + 1) || null;
+};
+
+const subscribeToConsent = (callback: () => void) => {
+  window.addEventListener('yahsab:cookie-consent-changed', callback);
+  return () => window.removeEventListener('yahsab:cookie-consent-changed', callback);
+};
+
 const writeConsent = (prefs: ConsentPrefs) => {
   if (typeof document === 'undefined') return;
   const payload = encodeURIComponent(JSON.stringify(prefs));
   document.cookie = `${COOKIE_NAME}=${payload}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+  window.dispatchEvent(new Event('yahsab:cookie-consent-changed'));
 };
 
 export const CookieConsent: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [preferences, setPreferences] = useState<ConsentPrefs>(defaultPrefs);
-  const [showPreferences, setShowPreferences] = useState(false);
-
-  useEffect(() => {
-    const stored = readConsent();
-    if (stored) {
-      setPreferences(stored);
-    } else {
-      setIsOpen(true);
+  const consentCookie = useSyncExternalStore(subscribeToConsent, readConsentCookie, () => null);
+  const storedPreferences = useMemo(() => {
+    if (!consentCookie) return defaultPrefs;
+    try {
+      const parsed = JSON.parse(decodeURIComponent(consentCookie));
+      return { necessary: true as const, analytics: Boolean(parsed.analytics), marketing: Boolean(parsed.marketing) };
+    } catch {
+      return defaultPrefs;
     }
+  }, [consentCookie]);
+  const [draftPreferences, setDraftPreferences] = useState<ConsentPrefs | null>(null);
+  const preferences = draftPreferences || storedPreferences;
+  const [showPreferences, setShowPreferences] = useState(false);
+  const isOpen = showPreferences || !consentCookie;
 
-    // Listen for "reopen" events from the footer "Cookie settings" link
+  React.useEffect(() => {
     const handleReopen = () => {
-      const stored = readConsent();
-      setPreferences(stored || defaultPrefs);
+      setDraftPreferences(readConsent() || defaultPrefs);
       setShowPreferences(true);
-      setIsOpen(true);
     };
-
     window.addEventListener('yahsab:open-cookie-settings', handleReopen);
     return () => window.removeEventListener('yahsab:open-cookie-settings', handleReopen);
   }, []);
 
   const save = (next: ConsentPrefs) => {
-    setPreferences(next);
     writeConsent(next);
-    setIsOpen(false);
+    setDraftPreferences(null);
     setShowPreferences(false);
   };
 
@@ -116,7 +129,7 @@ export const CookieConsent: React.FC = () => {
                 <input
                   type="checkbox"
                   checked={preferences.analytics}
-                  onChange={(e) => setPreferences({ ...preferences, analytics: e.target.checked })}
+                  onChange={(e) => setDraftPreferences({ ...preferences, analytics: e.target.checked })}
                   className="h-4 w-4"
                 />
               </label>
@@ -125,7 +138,7 @@ export const CookieConsent: React.FC = () => {
                 <input
                   type="checkbox"
                   checked={preferences.marketing}
-                  onChange={(e) => setPreferences({ ...preferences, marketing: e.target.checked })}
+                  onChange={(e) => setDraftPreferences({ ...preferences, marketing: e.target.checked })}
                   className="h-4 w-4"
                 />
               </label>

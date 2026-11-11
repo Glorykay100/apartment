@@ -3,6 +3,9 @@ const path = require('node:path');
 const dotenv = require('dotenv');
 
 const backendDir = path.resolve(__dirname, '..');
+// Keep the Node executable running this script in front of system Node when
+// child npm commands invoke their CLI shims (useful in CI and local runtimes).
+process.env.PATH = `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH || ''}`;
 const envPath = path.join(backendDir, '.env.test');
 const loaded = dotenv.config({ path: envPath, override: true });
 if (loaded.error) {
@@ -30,7 +33,8 @@ function run(args) {
 
 let result = run(['exec', 'prisma', '--', 'db', 'push', '--force-reset', '--accept-data-loss']);
 if (result === 0) result = run(['run', 'prisma:seed']);
-if (result === 0) result = run(['exec', 'vitest', '--', 'run', '--maxWorkers=1', '--minWorkers=1']);
+if (result === 0) result = run(['exec', 'vitest', '--', 'run']);
+if (result === 0) result = run(['exec', 'vitest', '--', 'run', '--coverage']);
 
 // Leave the disposable database empty even if a test fails.
 const cleanupResult = run(['exec', 'prisma', '--', 'db', 'push', '--force-reset', '--accept-data-loss']);

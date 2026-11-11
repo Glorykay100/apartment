@@ -34,7 +34,7 @@ export const submitContact = async (req: Request, res: Response): Promise<void> 
       res.status(400).json({
         success: false,
         message: 'Validation failed',
-        errors: error.errors,
+        errors: error.issues,
       });
       return;
     }

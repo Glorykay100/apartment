@@ -134,6 +134,10 @@ npm run dev:frontend
 Frontend: http://localhost:3000
 Backend: http://localhost:5000/api/v1
 
+## Deployment
+
+Vercel deployment instructions for the frontend and API are in [docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md). The backend keeps using the existing PostgreSQL `DATABASE_URL`; Supabase is used only for authentication.
+
 ## Useful scripts
 
 ### Root

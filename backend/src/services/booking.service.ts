@@ -177,6 +177,10 @@ export const createReservation = async (params: {
 
   // Execute atomic transaction with double-booking lock check
   const booking = await prisma.$transaction(async (tx) => {
+    // Serialize booking creation per apartment: concurrent transactions wait
+    // on this lock, so the second one always sees the first one's row.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${quote.apartment.id}))`;
+
     // Re-verify collision within transaction to handle race conditions
     const now = new Date();
     const holdExpiry = new Date(Date.now() - BUSINESS_CONFIG.bookingHoldMinutes * 60 * 1000);

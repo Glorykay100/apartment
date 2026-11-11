@@ -68,7 +68,7 @@ export const recordConsent = async (req: Request, res: Response): Promise<void> 
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ success: false, message: 'Validation failed', errors: error.errors });
+      res.status(400).json({ success: false, message: 'Validation failed', errors: error.issues });
       return;
     }
     console.error('Record consent error:', error);
